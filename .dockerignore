@@ -1,0 +1,7 @@
+node_modules
+.git
+docker-compose.yml
+docker-compose.prod.yml
+start.ps1
+README.md
+docs

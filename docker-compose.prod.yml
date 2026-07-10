@@ -1,0 +1,51 @@
+name: paint-day-tracker-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: paint-day-postgres-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paint_tracker
+      POSTGRES_USER: paint
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Укажите POSTGRES_PASSWORD в .env}
+    volumes:
+      - paint_pg_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paint -d paint_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: paint-day-app
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-3000}
+      DATABASE_URL: postgres://paint:${POSTGRES_PASSWORD}@postgres:5432/paint_tracker
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: paint-day-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+      APP_PORT: ${PORT:-3000}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  paint_pg_data_prod:
+  caddy_data:
+  caddy_config:
