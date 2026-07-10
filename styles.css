@@ -356,6 +356,58 @@ h2 {
   margin-bottom: 14px;
 }
 
+.section-title > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.day-theme-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  max-width: 680px;
+}
+
+.day-theme-field {
+  display: grid;
+  gap: 6px;
+}
+
+.day-theme-field span {
+  color: var(--accent-dark);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.day-theme-field input {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #171511;
+  color: var(--ink);
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.day-theme-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(52, 165, 152, 0.22);
+  outline: none;
+}
+
+.day-theme-field input:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.82;
+}
+
+.save-theme-button {
+  min-width: 108px;
+}
+
 .current-day-date {
   margin: 5px 0 0;
   color: var(--muted);
@@ -842,6 +894,20 @@ tbody tr.is-paid td {
 
   .cards-grid {
     grid-template-columns: 1fr;
+  }
+
+  .section-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .day-theme-form {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .save-theme-button {
+    width: 100%;
   }
 
   .participants .table-wrap {

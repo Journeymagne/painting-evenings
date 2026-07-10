@@ -40,6 +40,9 @@ const openAuthButton = document.querySelector("#openAuthButton");
 const manageUsersButton = document.querySelector("#manageUsersButton");
 const logoutButton = document.querySelector("#logoutButton");
 const dayTabs = document.querySelector("#dayTabs");
+const dayThemeForm = document.querySelector("#dayThemeForm");
+const dayThemeInput = document.querySelector("#dayThemeInput");
+const saveDayThemeButton = document.querySelector("#saveDayThemeButton");
 const currentDayDate = document.querySelector("#currentDayDate");
 const cardsGrid = document.querySelector("#cardsGrid");
 const participantsBody = document.querySelector("#participantsBody");
@@ -80,6 +83,7 @@ const openCreateDayButton = document.querySelector("#openCreateDayButton");
 const createDayDialog = document.querySelector("#createDayDialog");
 const createDayForm = document.querySelector("#createDayForm");
 const dayDateInput = document.querySelector("#dayDateInput");
+const dayThemeCreateInput = document.querySelector("#dayThemeCreateInput");
 const dayFormError = document.querySelector("#dayFormError");
 const closeCreateDayButton = document.querySelector("#closeCreateDayButton");
 const cancelCreateDayButton = document.querySelector("#cancelCreateDayButton");
@@ -500,6 +504,32 @@ async function deleteDay(dayId) {
   }
 }
 
+async function saveActiveDayTheme() {
+  const activeDay = getActiveDay();
+  if (!activeDay) {
+    return;
+  }
+
+  if (!appState.currentUser?.isAdmin) {
+    window.alert("Менять тематику дня может только админ.");
+    return;
+  }
+
+  try {
+    const data = await apiFetch(`/api/days/${encodeURIComponent(activeDay.id)}/theme`, {
+      method: "PATCH",
+      body: { theme: dayThemeInput.value },
+    });
+    const day = appState.days.find((item) => item.id === activeDay.id);
+    if (day) {
+      day.theme = data.day.theme;
+    }
+    render();
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
 function renderCards() {
   cardsGrid.innerHTML = "";
 
@@ -720,6 +750,7 @@ function openCreateDay() {
   }
 
   dayDateInput.value = todayLocal();
+  dayThemeCreateInput.value = "";
   dayFormError.textContent = "";
   createDayDialog.showModal();
   dayDateInput.focus();
@@ -859,6 +890,7 @@ createDayForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const date = dayDateInput.value;
+  const theme = dayThemeCreateInput.value.trim();
   if (!isDateValue(date)) {
     dayFormError.textContent = "Выбери дату.";
     return;
@@ -867,7 +899,7 @@ createDayForm.addEventListener("submit", async (event) => {
   try {
     const data = await apiFetch("/api/days", {
       method: "POST",
-      body: { date },
+      body: { date, theme },
     });
     closeCreateDay();
     await loadApp(data.day.id);
@@ -898,6 +930,11 @@ closeAuthButton.addEventListener("click", closeAuthDialog);
 manageUsersButton.addEventListener("click", openUsersDialog);
 closeUsersButton.addEventListener("click", closeUsersDialog);
 logoutButton.addEventListener("click", logoutUser);
+
+dayThemeForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveActiveDayTheme();
+});
 
 usersBody.addEventListener("click", (event) => {
   if (!(event.target instanceof HTMLButtonElement) || !event.target.classList.contains("grant-admin-button")) {
@@ -1045,6 +1082,12 @@ usersDialog.addEventListener("click", (event) => {
 function render() {
   const activeDay = getActiveDay();
   currentDayDate.textContent = activeDay ? `Дата: ${formatDate(activeDay.date)}` : "Дней пока нет";
+  dayThemeInput.value = activeDay?.theme || "";
+  dayThemeInput.disabled = !activeDay || !appState.currentUser?.isAdmin;
+  saveDayThemeButton.disabled = !activeDay || !appState.currentUser?.isAdmin;
+  dayThemeInput.placeholder = appState.currentUser?.isAdmin
+    ? "Например: вархаммер, киллтим, террейн"
+    : "Тематика пока не задана";
   renderAuth();
   renderDayTabs();
   renderCards();

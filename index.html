@@ -36,7 +36,13 @@
         <div class="places">
           <div class="section-title">
             <div>
-              <h2>Карточки</h2>
+              <form class="day-theme-form" id="dayThemeForm">
+                <label class="day-theme-field">
+                  <span>Тематика дня покраса</span>
+                  <input id="dayThemeInput" name="theme" type="text" maxlength="120" placeholder="Например: вархаммер, киллтим, террейн" />
+                </label>
+                <button class="ghost-button save-theme-button" id="saveDayThemeButton" type="submit">Сохранить</button>
+              </form>
               <p class="current-day-date" id="currentDayDate"></p>
             </div>
             <button class="ghost-button" id="clearAllButton" type="button">Очистить</button>
@@ -168,6 +174,11 @@
         <label class="field">
           <span>Дата</span>
           <input id="dayDateInput" name="date" type="date" required />
+        </label>
+
+        <label class="field">
+          <span>Тематика</span>
+          <input id="dayThemeCreateInput" name="theme" type="text" maxlength="120" placeholder="Например: вархаммер, киллтим, террейн" />
         </label>
 
         <p class="form-error" id="dayFormError" role="alert"></p>

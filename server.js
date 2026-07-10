@@ -87,6 +87,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS paint_days (
       id TEXT PRIMARY KEY,
       paint_date DATE NOT NULL UNIQUE,
+      theme TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -107,6 +108,7 @@ async function initDb() {
   `);
 
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false");
+  await pool.query("ALTER TABLE paint_days ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT ''");
   await pool.query(`
     UPDATE users
     SET is_admin = true
@@ -118,11 +120,11 @@ async function initDb() {
 
   await pool.query(
     `
-      INSERT INTO paint_days (id, paint_date)
-      SELECT $1, $2
+      INSERT INTO paint_days (id, paint_date, theme)
+      SELECT $1, $2, $3
       WHERE NOT EXISTS (SELECT 1 FROM paint_days)
     `,
-    [createId("day"), todayIsoDate()],
+    [createId("day"), todayIsoDate(), ""],
   );
 }
 
@@ -225,7 +227,7 @@ async function getState(req, res) {
   }
 
   const [daysResult, bookingsResult, usersResult] = await Promise.all([
-    pool.query("SELECT id, paint_date::text AS date FROM paint_days ORDER BY paint_date, id"),
+    pool.query("SELECT id, paint_date::text AS date, theme FROM paint_days ORDER BY paint_date, id"),
     pool.query(`
       SELECT
         id,
@@ -248,6 +250,7 @@ async function getState(req, res) {
     const day = {
       id: row.id,
       date: row.date,
+      theme: row.theme || "",
       bookings: {},
     };
     dayMap.set(day.id, day);
@@ -434,6 +437,7 @@ async function updateProfile(req, res, currentUser) {
 async function createDay(req, res) {
   const body = await readBody(req);
   const date = String(body.date || "");
+  const theme = String(body.theme || "").trim().slice(0, 120);
 
   if (!isDateValue(date)) {
     sendError(res, 400, "Некорректная дата.");
@@ -443,10 +447,11 @@ async function createDay(req, res) {
   const day = {
     id: createId("day"),
     date,
+    theme,
   };
 
   try {
-    await pool.query("INSERT INTO paint_days (id, paint_date) VALUES ($1, $2)", [day.id, day.date]);
+    await pool.query("INSERT INTO paint_days (id, paint_date, theme) VALUES ($1, $2, $3)", [day.id, day.date, day.theme]);
   } catch (error) {
     if (error.code === "23505") {
       sendError(res, 409, "Вечер с такой датой уже есть.");
@@ -472,6 +477,33 @@ async function deleteDay(req, res, dayId) {
   }
 
   sendJson(res, 200, { ok: true });
+}
+
+async function updateDayTheme(req, res, dayId) {
+  const body = await readBody(req);
+  const theme = String(body.theme || "").trim().slice(0, 120);
+  const result = await pool.query(
+    `
+      UPDATE paint_days
+      SET theme = $1
+      WHERE id = $2
+      RETURNING id, paint_date::text AS date, theme
+    `,
+    [theme, dayId],
+  );
+
+  if (!result.rowCount) {
+    sendError(res, 404, "Вечер не найден.");
+    return;
+  }
+
+  sendJson(res, 200, {
+    day: {
+      id: result.rows[0].id,
+      date: result.rows[0].date,
+      theme: result.rows[0].theme || "",
+    },
+  });
 }
 
 async function replacePlaceBookings(req, res, dayId, placeId) {
@@ -674,6 +706,15 @@ async function handleApi(req, res, url) {
         return;
       }
       await deleteDay(req, res, dayId);
+      return;
+    }
+
+    if (req.method === "PATCH" && parts.length === 4 && parts[3] === "theme") {
+      const admin = await requireAdmin(req, res);
+      if (!admin) {
+        return;
+      }
+      await updateDayTheme(req, res, dayId);
       return;
     }
 
