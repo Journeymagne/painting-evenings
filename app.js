@@ -536,11 +536,11 @@ function renderParticipants() {
     const placeText = row.place.capacity > 1 ? `${placeLabel(row.place)} · Игрок ${row.slotIndex + 1}` : placeLabel(row.place);
     tr.className = row.paid ? "is-paid" : "";
     tr.innerHTML = `
-      <td>${escapeHtml(row.name)}</td>
-      <td>${escapeHtml(row.telegram)}</td>
-      <td>${escapeHtml(row.time)}</td>
-      <td>${escapeHtml(placeText)}</td>
-      <td>
+      <td data-label="Имя">${escapeHtml(row.name)}</td>
+      <td data-label="Телеграм">${escapeHtml(row.telegram)}</td>
+      <td data-label="Время">${escapeHtml(row.time)}</td>
+      <td data-label="Стол">${escapeHtml(placeText)}</td>
+      <td data-label="Оплатил">
         <label class="paid-check">
           <input
             class="paid-checkbox"
