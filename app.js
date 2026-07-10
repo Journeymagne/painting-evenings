@@ -1,0 +1,1009 @@
+const AUTH_TOKEN_KEY = "paintTrackerAuthToken";
+
+const places = [
+  ...Array.from({ length: 8 }, (_, index) => ({
+    id: `paint-${index + 1}`,
+    title: "Покрасоместо",
+    detail: `Место ${index + 1}`,
+    capacity: 1,
+  })),
+  {
+    id: "big-table-1",
+    title: "Большой стол",
+    detail: "Киллтим, Бладболл, Андер",
+    capacity: 2,
+  },
+  {
+    id: "big-table-2",
+    title: "Большой стол",
+    detail: "Киллтим, Бладболл, Андер",
+    capacity: 2,
+  },
+  {
+    id: "tea-table",
+    title: "Чайный стол",
+    detail: "Киллтим, Бладболл, Андер",
+    capacity: 2,
+  },
+  {
+    id: "kitchen-table",
+    title: "Кухонный стол",
+    detail: "Бладболл, Андер",
+    capacity: 2,
+  },
+];
+
+const totalCapacity = places.reduce((sum, place) => sum + place.capacity, 0);
+
+const accountStatus = document.querySelector("#accountStatus");
+const openAuthButton = document.querySelector("#openAuthButton");
+const manageUsersButton = document.querySelector("#manageUsersButton");
+const logoutButton = document.querySelector("#logoutButton");
+const dayTabs = document.querySelector("#dayTabs");
+const currentDayDate = document.querySelector("#currentDayDate");
+const cardsGrid = document.querySelector("#cardsGrid");
+const participantsBody = document.querySelector("#participantsBody");
+const tableWrap = document.querySelector(".table-wrap");
+const reservedCount = document.querySelector("#reservedCount");
+const freeCount = document.querySelector("#freeCount");
+const authDialog = document.querySelector("#authDialog");
+const authForm = document.querySelector("#authForm");
+const authNameInput = document.querySelector("#authNameInput");
+const authPasswordInput = document.querySelector("#authPasswordInput");
+const authTelegramInput = document.querySelector("#authTelegramInput");
+const authTelegramField = document.querySelector("#authTelegramField");
+const authStatus = document.querySelector("#authStatus");
+const authMessage = document.querySelector("#authMessage");
+const authLoginTab = document.querySelector("#authLoginTab");
+const authRegisterTab = document.querySelector("#authRegisterTab");
+const authSubmitButton = document.querySelector("#authSubmitButton");
+const closeAuthButton = document.querySelector("#closeAuthButton");
+const usersDialog = document.querySelector("#usersDialog");
+const usersBody = document.querySelector("#usersBody");
+const usersTableWrap = document.querySelector(".users-table-wrap");
+const closeUsersButton = document.querySelector("#closeUsersButton");
+const bookingDialog = document.querySelector("#bookingDialog");
+const bookingForm = document.querySelector("#bookingForm");
+const bookingSlots = document.querySelector("#bookingSlots");
+const placeIdInput = document.querySelector("#placeId");
+const dialogTitle = document.querySelector("#dialogTitle");
+const formError = document.querySelector("#formError");
+const releaseButton = document.querySelector("#releaseButton");
+const closeDialogButton = document.querySelector("#closeDialogButton");
+const clearAllButton = document.querySelector("#clearAllButton");
+const openCreateDayButton = document.querySelector("#openCreateDayButton");
+const createDayDialog = document.querySelector("#createDayDialog");
+const createDayForm = document.querySelector("#createDayForm");
+const dayDateInput = document.querySelector("#dayDateInput");
+const dayFormError = document.querySelector("#dayFormError");
+const closeCreateDayButton = document.querySelector("#closeCreateDayButton");
+const cancelCreateDayButton = document.querySelector("#cancelCreateDayButton");
+
+let appState = {
+  activeDayId: null,
+  currentUser: null,
+  days: [],
+  users: [],
+};
+let authMode = "login";
+
+function getToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function setToken(token) {
+  if (token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    return;
+  }
+
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+async function apiFetch(path, options = {}) {
+  const headers = {
+    Accept: "application/json",
+    ...(options.headers || {}),
+  };
+  const token = getToken();
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const fetchOptions = {
+    ...options,
+    headers,
+  };
+
+  if (options.body && typeof options.body !== "string") {
+    headers["Content-Type"] = "application/json";
+    fetchOptions.body = JSON.stringify(options.body);
+  }
+
+  const response = await fetch(path, fetchOptions);
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "Ошибка сервера");
+  }
+
+  return data;
+}
+
+async function loadApp(preferredDayId = appState.activeDayId) {
+  try {
+    const data = await apiFetch("/api/state");
+    appState.days = data.days || [];
+    appState.users = data.users || [];
+    appState.currentUser = data.currentUser || null;
+    appState.activeDayId = appState.days.some((day) => day.id === preferredDayId)
+      ? preferredDayId
+      : appState.days[0]?.id || null;
+    render();
+  } catch (error) {
+    currentDayDate.textContent = "Сервер недоступен";
+    cardsGrid.innerHTML = "";
+    participantsBody.innerHTML = "";
+    tableWrap.classList.remove("has-rows");
+    setAuthMessage(error.message);
+  }
+}
+
+function getPlace(placeId) {
+  return places.find((place) => place.id === placeId);
+}
+
+function getActiveDay() {
+  return appState.days.find((day) => day.id === appState.activeDayId) || appState.days[0] || null;
+}
+
+function getActiveBookings() {
+  return getActiveDay()?.bookings || {};
+}
+
+function getBookingPlayers(placeId) {
+  const players = getActiveBookings()[placeId];
+  return Array.isArray(players) ? players : [];
+}
+
+function getUserById(userId) {
+  return appState.users.find((user) => user.id === userId);
+}
+
+function isDateValue(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value));
+}
+
+function formatDate(value) {
+  if (!isDateValue(value)) {
+    return value || "";
+  }
+
+  const [year, month, day] = value.split("-");
+  return `${day}.${month}.${year}`;
+}
+
+function todayLocal() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function placeLabel(place) {
+  return place.detail ? `${place.title} (${place.detail})` : place.title;
+}
+
+function normalizeTelegram(value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
+}
+
+function formatTimeInput(value) {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+
+  if (digits.length < 2) {
+    return digits;
+  }
+
+  if (digits.length === 2) {
+    return `${digits}:`;
+  }
+
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+function isValidTime(value) {
+  return /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+}
+
+function renderAuth() {
+  const user = appState.currentUser;
+  const role = user?.isAdmin ? " · админ" : "";
+  accountStatus.textContent = user ? `${user.name} · ${user.telegram}${role}` : "Не вошли";
+  authStatus.textContent = user ? `Вошли как ${user.name} · ${user.telegram}${role}` : "Войдите или зарегистрируйтесь";
+  openAuthButton.textContent = user ? "Профиль" : "Войти";
+  manageUsersButton.hidden = !user?.isAdmin;
+  logoutButton.hidden = !user;
+  closeAuthButton.hidden = !user;
+  openCreateDayButton.disabled = !user?.isAdmin;
+  openCreateDayButton.title = user?.isAdmin ? "Создать вечер покраса" : "Создавать вечера может только админ";
+  document.body.classList.toggle("is-auth-required", !user);
+  ensureAuthGate();
+}
+
+function ensureAuthGate() {
+  if (!appState.currentUser && !authDialog.open) {
+    openAuthDialog();
+  }
+}
+
+function renderUsersList() {
+  usersBody.innerHTML = "";
+  usersTableWrap.classList.toggle("has-rows", appState.users.length > 0);
+
+  appState.users.forEach((user) => {
+    const tr = document.createElement("tr");
+    const isSelf = user.id === appState.currentUser?.id;
+    const action = user.isAdmin
+      ? "Админ"
+      : `<button class="primary-button compact-button grant-admin-button" type="button" data-user-id="${escapeAttribute(user.id)}">Сделать админом</button>`;
+
+    tr.innerHTML = `
+      <td>${escapeHtml(user.name)}${isSelf ? " (вы)" : ""}</td>
+      <td>${escapeHtml(user.telegram)}</td>
+      <td>${user.isAdmin ? "Админ" : "Пользователь"}</td>
+      <td>${action}</td>
+    `;
+    usersBody.append(tr);
+  });
+}
+
+function openUsersDialog() {
+  if (!appState.currentUser?.isAdmin) {
+    window.alert("Список пользователей доступен только админу.");
+    return;
+  }
+
+  renderUsersList();
+  usersDialog.showModal();
+}
+
+function closeUsersDialog() {
+  usersDialog.close();
+}
+
+function setAuthMessage(message, type = "error") {
+  authMessage.textContent = message || "";
+  authMessage.classList.toggle("is-success", type === "success");
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const isLogin = mode === "login";
+
+  authForm.classList.toggle("is-login", isLogin);
+  authForm.classList.toggle("is-register", !isLogin);
+  authLoginTab.classList.toggle("is-active", isLogin);
+  authRegisterTab.classList.toggle("is-active", !isLogin);
+  authLoginTab.setAttribute("aria-selected", String(isLogin));
+  authRegisterTab.setAttribute("aria-selected", String(!isLogin));
+  authTelegramField.classList.toggle("is-hidden", isLogin);
+  authTelegramInput.required = !isLogin;
+  authTelegramInput.tabIndex = isLogin ? -1 : 0;
+  authSubmitButton.textContent = isLogin ? "Войти" : "Зарегистрироваться";
+  authStatus.textContent = isLogin ? "Введите имя и пароль" : "Заполните имя, пароль и Telegram";
+  setAuthMessage("");
+}
+
+function getAuthValues() {
+  return {
+    name: authNameInput.value.trim(),
+    password: authPasswordInput.value,
+    telegram: normalizeTelegram(authTelegramInput.value),
+  };
+}
+
+function openAuthDialog() {
+  const user = appState.currentUser;
+  authNameInput.value = user?.name || "";
+  authTelegramInput.value = user?.telegram || "";
+  authPasswordInput.value = "";
+  setAuthMode("login");
+  setAuthMessage("");
+  authDialog.showModal();
+  authNameInput.focus();
+}
+
+function closeAuthDialog() {
+  if (!appState.currentUser) {
+    authNameInput.focus();
+    return;
+  }
+
+  authForm.reset();
+  authDialog.close();
+}
+
+async function registerUserFromForm() {
+  const { name, password, telegram } = getAuthValues();
+
+  if (!name || !password || !telegram) {
+    setAuthMessage("Для регистрации заполни имя, пароль и телеграм.");
+    return;
+  }
+
+  try {
+    const data = await apiFetch("/api/auth/register", {
+      method: "POST",
+      body: { name, password, telegram },
+    });
+    setToken(data.token);
+    appState.currentUser = data.user;
+    setAuthMessage("Профиль создан.", "success");
+    closeAuthDialog();
+    await loadApp(appState.activeDayId);
+  } catch (error) {
+    setAuthMessage(error.message);
+  }
+}
+
+async function loginUserFromForm() {
+  const { name, password } = getAuthValues();
+
+  if (!name || !password) {
+    setAuthMessage("Для входа нужны имя и пароль.");
+    return;
+  }
+
+  try {
+    const data = await apiFetch("/api/auth/login", {
+      method: "POST",
+      body: { name, password },
+    });
+    setToken(data.token);
+    appState.currentUser = data.user;
+    setAuthMessage("Вы вошли.", "success");
+    closeAuthDialog();
+    await loadApp(appState.activeDayId);
+  } catch (error) {
+    setAuthMessage(error.message);
+  }
+}
+
+async function logoutUser() {
+  try {
+    await apiFetch("/api/auth/logout", { method: "POST" });
+  } catch {
+    // Token may already be invalid; local logout still clears the UI.
+  }
+
+  setToken(null);
+  appState.currentUser = null;
+  await loadApp(appState.activeDayId);
+}
+
+async function grantAdminToUser(userId) {
+  try {
+    await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}/admin`, {
+      method: "PATCH",
+      body: { isAdmin: true },
+    });
+    await loadApp(appState.activeDayId);
+    renderUsersList();
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
+function renderDayTabs() {
+  dayTabs.innerHTML = "";
+  const isAdmin = Boolean(appState.currentUser?.isAdmin);
+
+  appState.days.forEach((day) => {
+    const isActive = day.id === appState.activeDayId;
+    const tabItem = document.createElement("div");
+    const tab = document.createElement("button");
+    const deleteButton = document.createElement("button");
+
+    tabItem.className = `day-tab${isActive ? " is-active" : ""}`;
+    tabItem.setAttribute("role", "presentation");
+
+    tab.type = "button";
+    tab.className = `tab${isActive ? " is-active" : ""}`;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.textContent = `Вечер покраса ${formatDate(day.date)}`;
+    tab.addEventListener("click", () => {
+      appState.activeDayId = day.id;
+      render();
+    });
+
+    deleteButton.type = "button";
+    deleteButton.className = "delete-day-button";
+    deleteButton.disabled = appState.days.length === 1 || !isAdmin;
+    deleteButton.title = !isAdmin
+      ? "Удалять вечера может только админ"
+      : appState.days.length === 1
+        ? "Нельзя удалить последний вечер"
+        : "Удалить вечер";
+    deleteButton.setAttribute("aria-label", `Удалить вечер покраса ${formatDate(day.date)}`);
+    deleteButton.textContent = "×";
+    deleteButton.addEventListener("click", () => deleteDay(day.id));
+
+    tabItem.append(tab, deleteButton);
+    dayTabs.append(tabItem);
+  });
+}
+
+async function deleteDay(dayId) {
+  if (appState.days.length === 1) {
+    window.alert("Нельзя удалить последний вечер покраса.");
+    return;
+  }
+
+  const day = appState.days.find((item) => item.id === dayId);
+  const confirmed = window.confirm(`Удалить вечер покраса ${formatDate(day?.date)}? Все брони этого вечера тоже удалятся.`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await apiFetch(`/api/days/${encodeURIComponent(dayId)}`, { method: "DELETE" });
+    await loadApp(appState.activeDayId === dayId ? null : appState.activeDayId);
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
+function renderCards() {
+  cardsGrid.innerHTML = "";
+
+  places.forEach((place) => {
+    const players = getBookingPlayers(place.id);
+    const playerCount = players.length;
+    const isFull = playerCount >= place.capacity;
+    const isPartial = playerCount > 0 && !isFull;
+    const stateClass = isFull ? " is-booked" : isPartial ? " is-partial" : "";
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `place-card${stateClass}`;
+    card.setAttribute("aria-label", `${placeLabel(place)} ${getCardStatusText(place, playerCount)}`);
+    card.dataset.placeId = place.id;
+
+    card.innerHTML = `
+      <span class="place-main">
+        <span class="place-title">${escapeHtml(place.title)}</span>
+        <span class="place-detail">${escapeHtml(place.detail)}</span>
+      </span>
+      <span class="place-footer">
+        <span>${escapeHtml(getCardSummary(place, players))}</span>
+        <span class="status-pill">${escapeHtml(getCardStatusText(place, playerCount))}</span>
+      </span>
+    `;
+
+    card.addEventListener("click", () => openBooking(place.id));
+    cardsGrid.append(card);
+  });
+}
+
+function getCardSummary(place, players) {
+  if (!players.length) {
+    return "Свободно";
+  }
+
+  if (place.capacity === 1) {
+    return `${players[0].name}, ${players[0].time}`;
+  }
+
+  const names = players.map((player) => player.name).join(", ");
+  return `${players.length} из ${place.capacity}: ${names}`;
+}
+
+function getCardStatusText(place, playerCount) {
+  if (!playerCount) {
+    return "Открыто";
+  }
+
+  if (playerCount < place.capacity) {
+    return `${playerCount}/${place.capacity}`;
+  }
+
+  return "Занято";
+}
+
+function renderParticipants() {
+  const rows = Object.entries(getActiveBookings())
+    .flatMap(([placeId, players]) =>
+      players.map((player) => ({
+        place: getPlace(placeId),
+        placeId,
+        ...player,
+      })),
+    )
+    .filter((row) => row.place)
+    .sort((a, b) => a.time.localeCompare(b.time) || placeLabel(a.place).localeCompare(placeLabel(b.place)));
+
+  participantsBody.innerHTML = "";
+  tableWrap.classList.toggle("has-rows", rows.length > 0);
+
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    const placeText = row.place.capacity > 1 ? `${placeLabel(row.place)} · Игрок ${row.slotIndex + 1}` : placeLabel(row.place);
+    tr.className = row.paid ? "is-paid" : "";
+    tr.innerHTML = `
+      <td>${escapeHtml(row.name)}</td>
+      <td>${escapeHtml(row.telegram)}</td>
+      <td>${escapeHtml(row.time)}</td>
+      <td>${escapeHtml(placeText)}</td>
+      <td>
+        <label class="paid-check">
+          <input
+            class="paid-checkbox"
+            type="checkbox"
+            data-place-id="${escapeHtml(row.placeId)}"
+            data-slot-index="${row.slotIndex}"
+            ${row.paid ? "checked" : ""}
+          />
+          <span>Оплатил</span>
+        </label>
+      </td>
+    `;
+    participantsBody.append(tr);
+  });
+
+  reservedCount.textContent = String(rows.length);
+  freeCount.textContent = String(totalCapacity - rows.length);
+}
+
+function openBooking(placeId) {
+  if (!appState.currentUser) {
+    openAuthDialog();
+    return;
+  }
+
+  const activeDay = getActiveDay();
+  if (!activeDay) {
+    window.alert("Сначала создайте вечер покраса.");
+    return;
+  }
+
+  const place = getPlace(placeId);
+  const players = getBookingPlayers(placeId);
+
+  placeIdInput.value = placeId;
+  dialogTitle.textContent = placeLabel(place);
+  bookingSlots.innerHTML = "";
+  releaseButton.classList.toggle("is-hidden", players.length === 0);
+  formError.textContent = "";
+
+  Array.from({ length: place.capacity }, (_, slotIndex) => {
+    const player = players[slotIndex] || {};
+    bookingSlots.append(createPlayerSlot(place, player, slotIndex));
+  });
+
+  bookingDialog.showModal();
+  bookingSlots.querySelector("input:not([type='hidden'])")?.focus();
+}
+
+function createPlayerSlot(place, player, slotIndex) {
+  const slot = document.createElement("fieldset");
+  const title = place.capacity === 1 ? "Игрок" : `Игрок ${slotIndex + 1}`;
+  const hasActiveUser = Boolean(appState.currentUser);
+  slot.className = "player-slot";
+  slot.innerHTML = `
+    <legend>${title}</legend>
+    <input class="slot-user-id" data-slot-index="${slotIndex}" type="hidden" value="${escapeAttribute(player.userId || "")}" />
+    <div class="slot-user-tools">
+      <button
+        class="ghost-button use-current-user-button"
+        type="button"
+        data-slot-index="${slotIndex}"
+        ${hasActiveUser ? "" : "disabled"}
+      >
+        Подставить себя
+      </button>
+      <label class="field compact-field">
+        <span>Зарегистрированный юзер</span>
+        <select class="slot-user-select" data-slot-index="${slotIndex}" ${appState.users.length ? "" : "disabled"}>
+          ${getUserOptionsHtml(player.userId || "")}
+        </select>
+      </label>
+    </div>
+    <div class="slot-grid">
+      <label class="field">
+        <span>Имя</span>
+        <input
+          class="slot-name"
+          data-slot-index="${slotIndex}"
+          type="text"
+          autocomplete="name"
+          value="${escapeAttribute(player.name || "")}"
+        />
+      </label>
+      <label class="field">
+        <span>Телеграм контакт</span>
+        <input
+          class="slot-telegram"
+          data-slot-index="${slotIndex}"
+          type="text"
+          autocomplete="off"
+          placeholder="@username"
+          value="${escapeAttribute(player.telegram || "")}"
+        />
+      </label>
+      <label class="field">
+        <span>Время прихода</span>
+        <input
+          class="slot-time"
+          data-slot-index="${slotIndex}"
+          type="text"
+          inputmode="numeric"
+          maxlength="5"
+          placeholder="чч:мм"
+          value="${escapeAttribute(player.time || "")}"
+        />
+      </label>
+    </div>
+  `;
+  return slot;
+}
+
+function getUserOptionsHtml(selectedUserId) {
+  if (!appState.users.length) {
+    return '<option value="">Нет зарегистрированных</option>';
+  }
+
+  return [
+    '<option value="">Выбрать юзера</option>',
+    ...appState.users.map((user) => {
+      const selected = user.id === selectedUserId ? "selected" : "";
+      return `<option value="${escapeAttribute(user.id)}" ${selected}>${escapeHtml(user.name)} · ${escapeHtml(user.telegram)}</option>`;
+    }),
+  ].join("");
+}
+
+function closeBooking() {
+  bookingForm.reset();
+  bookingSlots.innerHTML = "";
+  bookingDialog.close();
+}
+
+function openCreateDay() {
+  if (!appState.currentUser?.isAdmin) {
+    window.alert("Создавать новые вечера покраса может только админ.");
+    return;
+  }
+
+  dayDateInput.value = todayLocal();
+  dayFormError.textContent = "";
+  createDayDialog.showModal();
+  dayDateInput.focus();
+}
+
+function closeCreateDay() {
+  createDayForm.reset();
+  createDayDialog.close();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll("`", "&#096;");
+}
+
+function applyUserToSlot(slotIndex, user) {
+  if (!user) {
+    return;
+  }
+
+  const userIdInput = bookingSlots.querySelector(`.slot-user-id[data-slot-index="${slotIndex}"]`);
+  const nameInput = bookingSlots.querySelector(`.slot-name[data-slot-index="${slotIndex}"]`);
+  const telegramInput = bookingSlots.querySelector(`.slot-telegram[data-slot-index="${slotIndex}"]`);
+  const timeInput = bookingSlots.querySelector(`.slot-time[data-slot-index="${slotIndex}"]`);
+  const select = bookingSlots.querySelector(`.slot-user-select[data-slot-index="${slotIndex}"]`);
+
+  if (userIdInput) {
+    userIdInput.value = user.id;
+  }
+
+  if (nameInput) {
+    nameInput.value = user.name;
+  }
+
+  if (telegramInput) {
+    telegramInput.value = user.telegram;
+  }
+
+  if (select) {
+    select.value = user.id;
+  }
+
+  if (timeInput && !timeInput.value) {
+    timeInput.focus();
+  }
+
+  formError.textContent = "";
+}
+
+function collectPlayers(place) {
+  const currentPlayers = getBookingPlayers(place.id);
+  const players = [];
+
+  for (let slotIndex = 0; slotIndex < place.capacity; slotIndex += 1) {
+    const userId = bookingSlots.querySelector(`.slot-user-id[data-slot-index="${slotIndex}"]`)?.value || null;
+    const name = bookingSlots.querySelector(`.slot-name[data-slot-index="${slotIndex}"]`)?.value.trim() || "";
+    const telegramRaw =
+      bookingSlots.querySelector(`.slot-telegram[data-slot-index="${slotIndex}"]`)?.value.trim() || "";
+    const telegram = normalizeTelegram(telegramRaw);
+    const time = bookingSlots.querySelector(`.slot-time[data-slot-index="${slotIndex}"]`)?.value.trim() || "";
+    const hasAnyValue = Boolean(name || telegramRaw || time);
+
+    if (!hasAnyValue) {
+      continue;
+    }
+
+    if (!name || !telegram || !time) {
+      return {
+        error: place.capacity === 1 ? "Заполни имя, телеграм и время." : `Заполни все поля у игрока ${slotIndex + 1}.`,
+      };
+    }
+
+    if (!isValidTime(time)) {
+      return {
+        error:
+          place.capacity === 1
+            ? "Время должно быть в формате чч:мм."
+            : `Время у игрока ${slotIndex + 1} должно быть в формате чч:мм.`,
+        focusSlotIndex: slotIndex,
+      };
+    }
+
+    players.push({
+      userId,
+      name,
+      telegram,
+      time,
+      paid: Boolean(currentPlayers[slotIndex]?.paid),
+    });
+  }
+
+  if (!players.length) {
+    return {
+      error: place.capacity === 1 ? "Заполни имя, телеграм и время." : "Добавь хотя бы одного игрока.",
+    };
+  }
+
+  return { players };
+}
+
+bookingForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const activeDay = getActiveDay();
+  const place = getPlace(placeIdInput.value);
+  const result = collectPlayers(place);
+
+  if (result.error) {
+    formError.textContent = result.error;
+    if (Number.isInteger(result.focusSlotIndex)) {
+      bookingSlots.querySelector(`.slot-time[data-slot-index="${result.focusSlotIndex}"]`)?.focus();
+    }
+    return;
+  }
+
+  try {
+    await apiFetch(`/api/days/${encodeURIComponent(activeDay.id)}/bookings/${encodeURIComponent(place.id)}`, {
+      method: "PUT",
+      body: { players: result.players },
+    });
+    closeBooking();
+    await loadApp(activeDay.id);
+  } catch (error) {
+    formError.textContent = error.message;
+  }
+});
+
+createDayForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const date = dayDateInput.value;
+  if (!isDateValue(date)) {
+    dayFormError.textContent = "Выбери дату.";
+    return;
+  }
+
+  try {
+    const data = await apiFetch("/api/days", {
+      method: "POST",
+      body: { date },
+    });
+    closeCreateDay();
+    await loadApp(data.day.id);
+  } catch (error) {
+    dayFormError.textContent = error.message;
+  }
+});
+
+authForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (authMode === "login") {
+    loginUserFromForm();
+    return;
+  }
+
+  registerUserFromForm();
+});
+
+authLoginTab.addEventListener("click", () => setAuthMode("login"));
+authRegisterTab.addEventListener("click", () => setAuthMode("register"));
+openAuthButton.addEventListener("click", openAuthDialog);
+closeAuthButton.addEventListener("click", closeAuthDialog);
+manageUsersButton.addEventListener("click", openUsersDialog);
+closeUsersButton.addEventListener("click", closeUsersDialog);
+logoutButton.addEventListener("click", logoutUser);
+
+usersBody.addEventListener("click", (event) => {
+  if (!(event.target instanceof HTMLButtonElement) || !event.target.classList.contains("grant-admin-button")) {
+    return;
+  }
+
+  grantAdminToUser(event.target.dataset.userId);
+});
+
+bookingSlots.addEventListener("click", (event) => {
+  if (!(event.target instanceof HTMLButtonElement) || !event.target.classList.contains("use-current-user-button")) {
+    return;
+  }
+
+  if (!appState.currentUser) {
+    formError.textContent = "Сначала войдите в профиль.";
+    return;
+  }
+
+  applyUserToSlot(Number(event.target.dataset.slotIndex), appState.currentUser);
+});
+
+bookingSlots.addEventListener("change", (event) => {
+  if (!(event.target instanceof HTMLSelectElement) || !event.target.classList.contains("slot-user-select")) {
+    return;
+  }
+
+  const user = getUserById(event.target.value);
+  applyUserToSlot(Number(event.target.dataset.slotIndex), user);
+});
+
+bookingSlots.addEventListener("input", (event) => {
+  if (!(event.target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  if (event.target.classList.contains("slot-time")) {
+    event.target.value = formatTimeInput(event.target.value);
+    event.target.setSelectionRange(event.target.value.length, event.target.value.length);
+  }
+
+  if (event.target.classList.contains("slot-name") || event.target.classList.contains("slot-telegram")) {
+    const userIdInput = bookingSlots.querySelector(`.slot-user-id[data-slot-index="${event.target.dataset.slotIndex}"]`);
+    if (userIdInput) {
+      userIdInput.value = "";
+    }
+  }
+
+  formError.textContent = "";
+});
+
+participantsBody.addEventListener("change", async (event) => {
+  if (!(event.target instanceof HTMLInputElement) || !event.target.classList.contains("paid-checkbox")) {
+    return;
+  }
+
+  const activeDay = getActiveDay();
+  const placeId = event.target.dataset.placeId;
+  const slotIndex = event.target.dataset.slotIndex;
+
+  try {
+    await apiFetch(
+      `/api/days/${encodeURIComponent(activeDay.id)}/bookings/${encodeURIComponent(placeId)}/${slotIndex}/paid`,
+      {
+        method: "PATCH",
+        body: { paid: event.target.checked },
+      },
+    );
+    await loadApp(activeDay.id);
+  } catch (error) {
+    window.alert(error.message);
+    await loadApp(activeDay.id);
+  }
+});
+
+releaseButton.addEventListener("click", async () => {
+  const activeDay = getActiveDay();
+  const placeId = placeIdInput.value;
+
+  try {
+    await apiFetch(`/api/days/${encodeURIComponent(activeDay.id)}/bookings/${encodeURIComponent(placeId)}`, {
+      method: "DELETE",
+    });
+    closeBooking();
+    await loadApp(activeDay.id);
+  } catch (error) {
+    formError.textContent = error.message;
+  }
+});
+
+closeDialogButton.addEventListener("click", closeBooking);
+openCreateDayButton.addEventListener("click", openCreateDay);
+closeCreateDayButton.addEventListener("click", closeCreateDay);
+cancelCreateDayButton.addEventListener("click", closeCreateDay);
+
+clearAllButton.addEventListener("click", async () => {
+  const activeDay = getActiveDay();
+  if (!activeDay || !Object.keys(activeDay.bookings || {}).length) {
+    return;
+  }
+
+  const confirmed = window.confirm("Очистить все брони за этот вечер?");
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await apiFetch(`/api/days/${encodeURIComponent(activeDay.id)}/bookings`, { method: "DELETE" });
+    await loadApp(activeDay.id);
+  } catch (error) {
+    window.alert(error.message);
+  }
+});
+
+bookingDialog.addEventListener("click", (event) => {
+  if (event.target === bookingDialog) {
+    closeBooking();
+  }
+});
+
+createDayDialog.addEventListener("click", (event) => {
+  if (event.target === createDayDialog) {
+    closeCreateDay();
+  }
+});
+
+authDialog.addEventListener("click", (event) => {
+  if (event.target === authDialog) {
+    closeAuthDialog();
+  }
+});
+
+authDialog.addEventListener("cancel", (event) => {
+  if (!appState.currentUser) {
+    event.preventDefault();
+  }
+});
+
+usersDialog.addEventListener("click", (event) => {
+  if (event.target === usersDialog) {
+    closeUsersDialog();
+  }
+});
+
+function render() {
+  const activeDay = getActiveDay();
+  currentDayDate.textContent = activeDay ? `Дата: ${formatDate(activeDay.date)}` : "Дней пока нет";
+  renderAuth();
+  renderDayTabs();
+  renderCards();
+  renderParticipants();
+}
+
+loadApp();

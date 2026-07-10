@@ -1,0 +1,23 @@
+name: paint-day-tracker
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: paint-day-postgres-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paint_tracker
+      POSTGRES_USER: paint
+      POSTGRES_PASSWORD: paint
+    ports:
+      - "55432:5432"
+    volumes:
+      - paint_pg_data_fresh:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paint -d paint_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  paint_pg_data_fresh:

@@ -1,0 +1,13 @@
+{
+  "name": "paint-day-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Сервис бронирования мест на дни покраса у Макса",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

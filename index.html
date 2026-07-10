@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Вечер покраса у Карповых</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Трекер покрасов</p>
+          <h1>Вечер покраса у Карповых</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="stats" aria-label="Сводка мест">
+            <span><b id="reservedCount">0</b> занято</span>
+            <span><b id="freeCount">16</b> свободно</span>
+          </div>
+          <div class="account-box" aria-label="Профиль">
+            <span id="accountStatus">Не вошли</span>
+            <button class="ghost-button" id="manageUsersButton" type="button" hidden>Пользователи</button>
+            <button class="ghost-button" id="openAuthButton" type="button">Войти</button>
+            <button class="danger-button compact-button" id="logoutButton" type="button" hidden>Выйти</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="day-switcher">
+        <div class="tabs" id="dayTabs" role="tablist" aria-label="Вечера покраса"></div>
+        <button class="primary-button create-day-button" id="openCreateDayButton" type="button">Создать</button>
+      </div>
+
+      <section class="workspace" aria-label="Бронирование мест">
+        <div class="places">
+          <div class="section-title">
+            <div>
+              <h2>Карточки</h2>
+              <p class="current-day-date" id="currentDayDate"></p>
+            </div>
+            <button class="ghost-button" id="clearAllButton" type="button">Очистить</button>
+          </div>
+          <div class="cards-grid" id="cardsGrid"></div>
+        </div>
+
+        <aside class="participants" aria-label="Участники">
+          <div class="section-title">
+            <h2>Участники</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Имя</th>
+                  <th>Телеграм</th>
+                  <th>Время</th>
+                  <th>Стол</th>
+                  <th>Оплатил</th>
+                </tr>
+              </thead>
+              <tbody id="participantsBody"></tbody>
+            </table>
+            <p class="empty-state" id="emptyState">Пока никто не записан</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <dialog class="booking-dialog" id="authDialog">
+      <form method="dialog" class="booking-form" id="authForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">TMA профиль</p>
+            <h2>Авторизация</h2>
+            <p class="auth-status" id="authStatus">Войдите или зарегистрируйтесь</p>
+          </div>
+          <button class="icon-button" id="closeAuthButton" type="button" aria-label="Закрыть">×</button>
+        </div>
+
+        <div class="auth-tabs" role="tablist" aria-label="Режим авторизации">
+          <button class="auth-tab is-active" id="authLoginTab" type="button" role="tab" aria-selected="true">Войти</button>
+          <button class="auth-tab" id="authRegisterTab" type="button" role="tab" aria-selected="false">Зарегистрироваться</button>
+        </div>
+
+        <div class="auth-form-grid">
+          <label class="field">
+            <span>Имя</span>
+            <input id="authNameInput" name="authName" type="text" autocomplete="username" />
+          </label>
+          <label class="field">
+            <span>Пароль</span>
+            <input id="authPasswordInput" name="authPassword" type="password" autocomplete="current-password" />
+          </label>
+          <label class="field is-hidden" id="authTelegramField">
+            <span>Телеграм контакт</span>
+            <input id="authTelegramInput" name="authTelegram" type="text" autocomplete="off" placeholder="@username" />
+          </label>
+        </div>
+
+        <p class="form-error auth-message" id="authMessage" role="alert"></p>
+
+        <div class="dialog-actions dialog-actions-right">
+          <button class="primary-button" id="authSubmitButton" type="submit">Войти</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="booking-dialog users-dialog" id="usersDialog">
+      <div class="booking-form">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Админ</p>
+            <h2>Пользователи</h2>
+          </div>
+          <button class="icon-button" id="closeUsersButton" type="button" aria-label="Закрыть">×</button>
+        </div>
+
+        <div class="table-wrap users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Телеграм</th>
+                <th>Роль</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+          <p class="empty-state" id="usersEmptyState">Пользователей пока нет</p>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="booking-dialog" id="bookingDialog">
+      <form method="dialog" class="booking-form" id="bookingForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Бронь места</p>
+            <h2 id="dialogTitle">Покрасоместо</h2>
+          </div>
+          <button class="icon-button" id="closeDialogButton" type="button" aria-label="Закрыть">×</button>
+        </div>
+
+        <input type="hidden" id="placeId" />
+        <div class="booking-slots" id="bookingSlots"></div>
+
+        <p class="form-error" id="formError" role="alert"></p>
+
+        <div class="dialog-actions">
+          <button class="danger-button" id="releaseButton" type="button">Освободить</button>
+          <button class="primary-button" type="submit">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="booking-dialog" id="createDayDialog">
+      <form method="dialog" class="booking-form" id="createDayForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Новый вечер</p>
+            <h2>Создать вечер покраса</h2>
+          </div>
+          <button class="icon-button" id="closeCreateDayButton" type="button" aria-label="Закрыть">×</button>
+        </div>
+
+        <label class="field">
+          <span>Дата</span>
+          <input id="dayDateInput" name="date" type="date" required />
+        </label>
+
+        <p class="form-error" id="dayFormError" role="alert"></p>
+
+        <div class="dialog-actions dialog-actions-right">
+          <button class="ghost-button" id="cancelCreateDayButton" type="button">Отмена</button>
+          <button class="primary-button" type="submit">Создать</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
