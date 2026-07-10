@@ -368,6 +368,69 @@ async function logout(req, res) {
   sendJson(res, 200, { ok: true });
 }
 
+async function updateProfile(req, res, currentUser) {
+  const body = await readBody(req);
+  const name = String(body.name || "").trim();
+  const telegram = normalizeTelegram(body.telegram || "");
+  const password = String(body.password || "");
+
+  if (!name || !telegram) {
+    sendError(res, 400, "Заполните имя и Telegram.");
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    let result;
+    if (password) {
+      const salt = crypto.randomBytes(16).toString("hex");
+      const passwordHash = hashPassword(password, salt);
+      result = await client.query(
+        `
+          UPDATE users
+          SET name = $1, telegram = $2, password_salt = $3, password_hash = $4
+          WHERE id = $5
+          RETURNING id, name, telegram, is_admin AS "isAdmin"
+        `,
+        [name, telegram, salt, passwordHash, currentUser.id],
+      );
+    } else {
+      result = await client.query(
+        `
+          UPDATE users
+          SET name = $1, telegram = $2
+          WHERE id = $3
+          RETURNING id, name, telegram, is_admin AS "isAdmin"
+        `,
+        [name, telegram, currentUser.id],
+      );
+    }
+
+    await client.query(
+      `
+        UPDATE booking_slots
+        SET guest_name = $1, telegram = $2, updated_at = now()
+        WHERE user_id = $3
+      `,
+      [name, telegram, currentUser.id],
+    );
+
+    await client.query("COMMIT");
+    sendJson(res, 200, { user: publicUser(result.rows[0]) });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error.code === "23505") {
+      sendError(res, 409, "Пользователь с таким именем уже существует.");
+      return;
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function createDay(req, res) {
   const body = await readBody(req);
   const date = String(body.date || "");
@@ -572,6 +635,15 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && url.pathname === "/api/auth/logout") {
     await logout(req, res);
+    return;
+  }
+
+  if (req.method === "PATCH" && url.pathname === "/api/auth/profile") {
+    const currentUser = await requireUser(req, res);
+    if (!currentUser) {
+      return;
+    }
+    await updateProfile(req, res, currentUser);
     return;
   }
 

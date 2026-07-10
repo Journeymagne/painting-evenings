@@ -226,6 +226,10 @@ h2 {
   padding: 4px;
 }
 
+.auth-form.is-profile .auth-tabs {
+  display: none;
+}
+
 .auth-tab {
   min-height: 40px;
   border: 0;

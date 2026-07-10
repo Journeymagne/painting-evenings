@@ -71,8 +71,8 @@
       <form method="dialog" class="booking-form" id="authForm">
         <div class="dialog-head">
           <div>
-            <p class="eyebrow">TMA профиль</p>
-            <h2>Авторизация</h2>
+            <p class="eyebrow" id="authEyebrow">Профиль</p>
+            <h2 id="authTitle">Авторизация</h2>
             <p class="auth-status" id="authStatus">Войдите или зарегистрируйтесь</p>
           </div>
           <button class="icon-button" id="closeAuthButton" type="button" aria-label="Закрыть">×</button>
@@ -85,11 +85,11 @@
 
         <div class="auth-form-grid">
           <label class="field">
-            <span>Имя</span>
+            <span id="authNameLabel">Имя</span>
             <input id="authNameInput" name="authName" type="text" autocomplete="username" />
           </label>
           <label class="field">
-            <span>Пароль</span>
+            <span id="authPasswordLabel">Пароль</span>
             <input id="authPasswordInput" name="authPassword" type="password" autocomplete="current-password" />
           </label>
           <label class="field is-hidden" id="authTelegramField">

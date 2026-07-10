@@ -48,6 +48,10 @@ const reservedCount = document.querySelector("#reservedCount");
 const freeCount = document.querySelector("#freeCount");
 const authDialog = document.querySelector("#authDialog");
 const authForm = document.querySelector("#authForm");
+const authEyebrow = document.querySelector("#authEyebrow");
+const authTitle = document.querySelector("#authTitle");
+const authNameLabel = document.querySelector("#authNameLabel");
+const authPasswordLabel = document.querySelector("#authPasswordLabel");
 const authNameInput = document.querySelector("#authNameInput");
 const authPasswordInput = document.querySelector("#authPasswordInput");
 const authTelegramInput = document.querySelector("#authTelegramInput");
@@ -225,7 +229,7 @@ function renderAuth() {
   const user = appState.currentUser;
   const role = user?.isAdmin ? " · админ" : "";
   accountStatus.textContent = user ? `${user.name} · ${user.telegram}${role}` : "Не вошли";
-  authStatus.textContent = user ? `Вошли как ${user.name} · ${user.telegram}${role}` : "Войдите или зарегистрируйтесь";
+  authStatus.textContent = user ? "Можно изменить имя, пароль и телеграм контакт." : "Войдите или зарегистрируйтесь";
   openAuthButton.textContent = user ? "Профиль" : "Войти";
   manageUsersButton.hidden = !user?.isAdmin;
   logoutButton.hidden = !user;
@@ -285,18 +289,30 @@ function setAuthMessage(message, type = "error") {
 function setAuthMode(mode) {
   authMode = mode;
   const isLogin = mode === "login";
+  const isProfile = mode === "profile";
 
   authForm.classList.toggle("is-login", isLogin);
-  authForm.classList.toggle("is-register", !isLogin);
+  authForm.classList.toggle("is-register", mode === "register");
+  authForm.classList.toggle("is-profile", isProfile);
   authLoginTab.classList.toggle("is-active", isLogin);
-  authRegisterTab.classList.toggle("is-active", !isLogin);
+  authRegisterTab.classList.toggle("is-active", mode === "register");
   authLoginTab.setAttribute("aria-selected", String(isLogin));
-  authRegisterTab.setAttribute("aria-selected", String(!isLogin));
+  authRegisterTab.setAttribute("aria-selected", String(mode === "register"));
   authTelegramField.classList.toggle("is-hidden", isLogin);
   authTelegramInput.required = !isLogin;
   authTelegramInput.tabIndex = isLogin ? -1 : 0;
-  authSubmitButton.textContent = isLogin ? "Войти" : "Зарегистрироваться";
-  authStatus.textContent = isLogin ? "Введите имя и пароль" : "Заполните имя, пароль и Telegram";
+  authPasswordInput.required = !isProfile;
+  authPasswordInput.autocomplete = isProfile ? "new-password" : isLogin ? "current-password" : "new-password";
+  authEyebrow.textContent = isProfile ? "Профиль" : "Аккаунт";
+  authTitle.textContent = isProfile ? "Профиль" : "Авторизация";
+  authNameLabel.textContent = isProfile ? "Имя" : "Имя";
+  authPasswordLabel.textContent = isProfile ? "Новый пароль" : "Пароль";
+  authSubmitButton.textContent = isProfile ? "Сохранить" : isLogin ? "Войти" : "Зарегистрироваться";
+  authStatus.textContent = isProfile
+    ? "Измените имя, пароль и телеграм контакт."
+    : isLogin
+      ? "Введите имя и пароль"
+      : "Заполните имя, пароль и Telegram";
   setAuthMessage("");
 }
 
@@ -313,7 +329,7 @@ function openAuthDialog() {
   authNameInput.value = user?.name || "";
   authTelegramInput.value = user?.telegram || "";
   authPasswordInput.value = "";
-  setAuthMode("login");
+  setAuthMode(user ? "profile" : "login");
   setAuthMessage("");
   authDialog.showModal();
   authNameInput.focus();
@@ -368,6 +384,28 @@ async function loginUserFromForm() {
     setToken(data.token);
     appState.currentUser = data.user;
     setAuthMessage("Вы вошли.", "success");
+    closeAuthDialog();
+    await loadApp(appState.activeDayId);
+  } catch (error) {
+    setAuthMessage(error.message);
+  }
+}
+
+async function updateProfileFromForm() {
+  const { name, password, telegram } = getAuthValues();
+
+  if (!name || !telegram) {
+    setAuthMessage("Заполните имя и телеграм контакт.");
+    return;
+  }
+
+  try {
+    const data = await apiFetch("/api/auth/profile", {
+      method: "PATCH",
+      body: { name, password, telegram },
+    });
+    appState.currentUser = data.user;
+    setAuthMessage("Профиль сохранён.", "success");
     closeAuthDialog();
     await loadApp(appState.activeDayId);
   } catch (error) {
@@ -838,6 +876,11 @@ createDayForm.addEventListener("submit", async (event) => {
 
 authForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (authMode === "profile") {
+    updateProfileFromForm();
+    return;
+  }
+
   if (authMode === "login") {
     loginUserFromForm();
     return;
