@@ -226,6 +226,10 @@ h2 {
   padding: 4px;
 }
 
+.auth-tabs[hidden] {
+  display: none;
+}
+
 .auth-form.is-profile .auth-tabs {
   display: none;
 }

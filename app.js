@@ -58,6 +58,7 @@ const authTelegramInput = document.querySelector("#authTelegramInput");
 const authTelegramField = document.querySelector("#authTelegramField");
 const authStatus = document.querySelector("#authStatus");
 const authMessage = document.querySelector("#authMessage");
+const authTabs = document.querySelector(".auth-tabs");
 const authLoginTab = document.querySelector("#authLoginTab");
 const authRegisterTab = document.querySelector("#authRegisterTab");
 const authSubmitButton = document.querySelector("#authSubmitButton");
@@ -294,6 +295,7 @@ function setAuthMode(mode) {
   authForm.classList.toggle("is-login", isLogin);
   authForm.classList.toggle("is-register", mode === "register");
   authForm.classList.toggle("is-profile", isProfile);
+  authTabs.hidden = isProfile;
   authLoginTab.classList.toggle("is-active", isLogin);
   authRegisterTab.classList.toggle("is-active", mode === "register");
   authLoginTab.setAttribute("aria-selected", String(isLogin));
