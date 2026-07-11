@@ -600,6 +600,7 @@ function renderParticipants() {
 
   participantsBody.innerHTML = "";
   tableWrap.classList.toggle("has-rows", rows.length > 0);
+  const canManagePayments = Boolean(appState.currentUser?.isAdmin);
 
   rows.forEach((row) => {
     const tr = document.createElement("tr");
@@ -611,15 +612,16 @@ function renderParticipants() {
       <td data-label="Время">${escapeHtml(row.time)}</td>
       <td data-label="Стол">${escapeHtml(placeText)}</td>
       <td data-label="Оплатил">
-        <label class="paid-check">
+        <label class="paid-check${canManagePayments ? "" : " is-readonly"}" title="${canManagePayments ? "Отметить оплату" : "Оплату может отметить только админ"}">
           <input
             class="paid-checkbox"
             type="checkbox"
             data-place-id="${escapeHtml(row.placeId)}"
             data-slot-index="${row.slotIndex}"
             ${row.paid ? "checked" : ""}
+            ${canManagePayments ? "" : "disabled"}
           />
-          <span>Оплатил</span>
+          <span>${row.paid ? "Оплатил" : "Не оплатил"}</span>
         </label>
       </td>
     `;
@@ -992,6 +994,12 @@ participantsBody.addEventListener("change", async (event) => {
   }
 
   const activeDay = getActiveDay();
+  if (!appState.currentUser?.isAdmin) {
+    event.target.checked = !event.target.checked;
+    window.alert("Отмечать оплату может только админ.");
+    return;
+  }
+
   const placeId = event.target.dataset.placeId;
   const slotIndex = event.target.dataset.slotIndex;
 

@@ -506,7 +506,7 @@ async function updateDayTheme(req, res, dayId) {
   });
 }
 
-async function replacePlaceBookings(req, res, dayId, placeId) {
+async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
   const place = placeById.get(placeId);
   if (!place) {
     sendError(res, 404, "Место не найдено.");
@@ -520,16 +520,25 @@ async function replacePlaceBookings(req, res, dayId, placeId) {
   }
 
   const body = await readBody(req);
+  const existingResult = await pool.query(
+    `
+      SELECT slot_index AS "slotIndex", paid
+      FROM booking_slots
+      WHERE day_id = $1 AND place_id = $2
+    `,
+    [dayId, placeId],
+  );
+  const existingPaidBySlot = new Map(existingResult.rows.map((row) => [row.slotIndex, Boolean(row.paid)]));
   const rawPlayers = Array.isArray(body.players) ? body.players : [];
   const players = rawPlayers
     .filter((player) => player && (player.name || player.telegram || player.time))
     .slice(0, place.capacity)
-    .map((player) => ({
+    .map((player, slotIndex) => ({
       userId: player.userId || null,
       name: String(player.name || "").trim(),
       telegram: normalizeTelegram(player.telegram || ""),
       time: String(player.time || "").trim(),
-      paid: Boolean(player.paid),
+      paid: currentUser.isAdmin ? Boolean(player.paid) : Boolean(existingPaidBySlot.get(slotIndex)),
     }));
 
   if (!players.length) {
@@ -732,7 +741,7 @@ async function handleApi(req, res, url) {
       const placeId = parts[4] ? decodeURIComponent(parts[4]) : "";
 
       if (req.method === "PUT" && parts.length === 5) {
-        await replacePlaceBookings(req, res, dayId, placeId);
+        await replacePlaceBookings(req, res, dayId, placeId, currentUser);
         return;
       }
 
@@ -742,6 +751,10 @@ async function handleApi(req, res, url) {
       }
 
       if (req.method === "PATCH" && parts.length === 7 && parts[6] === "paid") {
+        const admin = await requireAdmin(req, res);
+        if (!admin) {
+          return;
+        }
         await updatePaid(req, res, dayId, placeId, parts[5]);
         return;
       }

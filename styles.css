@@ -640,11 +640,21 @@ tbody tr.is-paid td {
   white-space: nowrap;
 }
 
+.paid-check.is-readonly {
+  color: var(--muted);
+  cursor: default;
+}
+
 .paid-check input {
   width: 18px;
   height: 18px;
   margin: 0;
   accent-color: var(--accent);
+}
+
+.paid-check input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .empty-state {
@@ -937,11 +947,12 @@ tbody tr.is-paid td {
     border-radius: 8px;
     background: rgba(33, 30, 25, 0.92);
     overflow: hidden;
-    padding: 8px 12px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
   }
 
   .participants tbody tr.is-paid {
     border-color: rgba(63, 180, 109, 0.5);
+    background: rgba(22, 58, 40, 0.76);
   }
 
   .participants tbody tr.is-paid td {
@@ -954,11 +965,35 @@ tbody tr.is-paid td {
     gap: 10px;
     align-items: center;
     border-bottom: 1px solid var(--line);
-    padding: 8px 0;
+    margin: 0 12px;
+    padding: 9px 0;
   }
 
   .participants td:last-child {
     border-bottom: 0;
+  }
+
+  .participants td:first-child {
+    margin: 0;
+    padding: 12px 12px 8px;
+    font-size: 17px;
+    font-weight: 850;
+  }
+
+  .participants td:first-child::before {
+    margin-bottom: 3px;
+  }
+
+  .participants td:nth-child(5) {
+    grid-template-columns: 1fr;
+    margin: 10px 0 0;
+    padding: 12px;
+    border-top: 1px solid var(--line);
+    background: rgba(23, 21, 17, 0.5);
+  }
+
+  .participants td:nth-child(5)::before {
+    display: none;
   }
 
   .participants td::before {
@@ -970,7 +1005,31 @@ tbody tr.is-paid td {
   }
 
   .participants .paid-check {
-    justify-content: flex-start;
+    width: 100%;
+    min-height: 46px;
+    justify-content: space-between;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(40, 35, 29, 0.82);
+    padding: 0 12px;
+    font-size: 15px;
+  }
+
+  .participants .paid-check input {
+    order: 2;
+    width: 24px;
+    height: 24px;
+  }
+
+  .participants .paid-check.is-readonly {
+    justify-content: center;
+    border-color: transparent;
+    background: transparent;
+    padding: 0;
+  }
+
+  .participants .paid-check.is-readonly input {
+    display: none;
   }
 
   .dialog-actions {
