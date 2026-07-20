@@ -497,6 +497,17 @@ h2 {
   outline: none;
 }
 
+.place-card.is-view-only {
+  cursor: default;
+}
+
+.place-card.is-view-only:hover,
+.place-card.is-view-only:focus-visible {
+  transform: none;
+  border-color: var(--line);
+  box-shadow: 0 6px 18px rgba(31, 28, 24, 0.06);
+}
+
 .place-card.is-booked {
   background: var(--booked);
   border-color: var(--booked-line);
@@ -725,6 +736,11 @@ tbody tr.is-paid td {
   color: var(--accent-dark);
   font-size: 14px;
   font-weight: 850;
+}
+
+.player-slot.is-readonly {
+  border-color: rgba(64, 56, 46, 0.72);
+  opacity: 0.86;
 }
 
 .slot-user-tools {

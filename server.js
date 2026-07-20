@@ -97,6 +97,7 @@ async function initDb() {
       place_id TEXT NOT NULL,
       slot_index INTEGER NOT NULL,
       user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       guest_name TEXT NOT NULL,
       telegram TEXT NOT NULL,
       arrival_time TIME NOT NULL,
@@ -109,6 +110,8 @@ async function initDb() {
 
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false");
   await pool.query("ALTER TABLE paint_days ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT ''");
+  await pool.query("ALTER TABLE booking_slots ADD COLUMN IF NOT EXISTS created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL");
+  await pool.query("UPDATE booking_slots SET created_by_user_id = user_id WHERE created_by_user_id IS NULL");
   await pool.query(`
     UPDATE users
     SET is_admin = true
@@ -217,14 +220,6 @@ async function readBody(req) {
 
 async function getState(req, res) {
   const currentUser = await getCurrentUser(req);
-  if (!currentUser) {
-    sendJson(res, 200, {
-      currentUser: null,
-      days: [],
-      users: [],
-    });
-    return;
-  }
 
   const [daysResult, bookingsResult, usersResult] = await Promise.all([
     pool.query("SELECT id, paint_date::text AS date, theme FROM paint_days ORDER BY paint_date, id"),
@@ -235,6 +230,7 @@ async function getState(req, res) {
         place_id AS "placeId",
         slot_index AS "slotIndex",
         user_id AS "userId",
+        created_by_user_id AS "createdByUserId",
         guest_name AS name,
         telegram,
         to_char(arrival_time, 'HH24:MI') AS time,
@@ -242,7 +238,9 @@ async function getState(req, res) {
       FROM booking_slots
       ORDER BY day_id, place_id, slot_index
     `),
-    pool.query('SELECT id, name, telegram, is_admin AS "isAdmin" FROM users ORDER BY lower(name), name'),
+    currentUser
+      ? pool.query('SELECT id, name, telegram, is_admin AS "isAdmin" FROM users ORDER BY lower(name), name')
+      : Promise.resolve({ rows: [] }),
   ]);
 
   const dayMap = new Map();
@@ -267,15 +265,16 @@ async function getState(req, res) {
       day.bookings[row.placeId] = [];
     }
 
-    day.bookings[row.placeId].push({
+    day.bookings[row.placeId][row.slotIndex] = {
       bookingId: row.id,
       slotIndex: row.slotIndex,
       userId: row.userId,
+      canDelete: Boolean(currentUser?.isAdmin || row.createdByUserId === currentUser?.id),
       name: row.name,
       telegram: row.telegram,
       time: row.time,
       paid: row.paid,
-    });
+    };
   });
 
   sendJson(res, 200, {
@@ -522,24 +521,62 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
   const body = await readBody(req);
   const existingResult = await pool.query(
     `
-      SELECT slot_index AS "slotIndex", paid
+      SELECT
+        slot_index AS "slotIndex",
+        user_id AS "userId",
+        created_by_user_id AS "createdByUserId",
+        guest_name AS name,
+        telegram,
+        to_char(arrival_time, 'HH24:MI') AS time,
+        paid
       FROM booking_slots
       WHERE day_id = $1 AND place_id = $2
+      ORDER BY slot_index
     `,
     [dayId, placeId],
   );
-  const existingPaidBySlot = new Map(existingResult.rows.map((row) => [row.slotIndex, Boolean(row.paid)]));
+  const existingBySlot = new Map(existingResult.rows.map((row) => [row.slotIndex, row]));
   const rawPlayers = Array.isArray(body.players) ? body.players : [];
-  const players = rawPlayers
-    .filter((player) => player && (player.name || player.telegram || player.time))
-    .slice(0, place.capacity)
-    .map((player, slotIndex) => ({
-      userId: player.userId || null,
-      name: String(player.name || "").trim(),
-      telegram: normalizeTelegram(player.telegram || ""),
-      time: String(player.time || "").trim(),
-      paid: currentUser.isAdmin ? Boolean(player.paid) : Boolean(existingPaidBySlot.get(slotIndex)),
-    }));
+  const players = [];
+
+  for (let slotIndex = 0; slotIndex < place.capacity; slotIndex += 1) {
+    const existing = existingBySlot.get(slotIndex);
+    const isForeignSlot = Boolean(existing && !currentUser.isAdmin && existing.createdByUserId !== currentUser.id);
+    const rawPlayer = rawPlayers[slotIndex] || {};
+
+    if (isForeignSlot) {
+      players.push({
+        slotIndex,
+        userId: existing.userId || null,
+        createdByUserId: existing.createdByUserId || null,
+        name: existing.name,
+        telegram: existing.telegram,
+        time: existing.time,
+        paid: Boolean(existing.paid),
+      });
+      continue;
+    }
+
+    const name = String(rawPlayer.name || "").trim();
+    const telegramRaw = String(rawPlayer.telegram || "").trim();
+    const telegram = normalizeTelegram(telegramRaw);
+    const time = String(rawPlayer.time || "").trim();
+    const hasAnyValue = Boolean(name || telegramRaw || time);
+
+    if (!hasAnyValue) {
+      continue;
+    }
+
+    players.push({
+      slotIndex,
+      userId: rawPlayer.userId || null,
+      createdByUserId: existing?.createdByUserId || currentUser.id,
+      name,
+      telegram,
+      time,
+      paid: currentUser.isAdmin ? Boolean(rawPlayer.paid) : Boolean(existing?.paid),
+    });
+  }
 
   if (!players.length) {
     sendError(res, 400, "Добавьте хотя бы одного игрока.");
@@ -558,7 +595,7 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
     await client.query("BEGIN");
     await client.query("DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2", [dayId, placeId]);
 
-    for (const [slotIndex, player] of players.entries()) {
+    for (const player of players) {
       await client.query(
         `
           INSERT INTO booking_slots (
@@ -567,19 +604,21 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
             place_id,
             slot_index,
             user_id,
+            created_by_user_id,
             guest_name,
             telegram,
             arrival_time,
             paid
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
         [
           createId("booking"),
           dayId,
           placeId,
-          slotIndex,
+          player.slotIndex,
           player.userId,
+          player.createdByUserId,
           player.name,
           player.telegram,
           player.time,
@@ -598,8 +637,19 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
   }
 }
 
-async function deletePlaceBookings(req, res, dayId, placeId) {
-  await pool.query("DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2", [dayId, placeId]);
+async function deletePlaceBookings(req, res, dayId, placeId, currentUser) {
+  const result = currentUser.isAdmin
+    ? await pool.query("DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2", [dayId, placeId])
+    : await pool.query(
+        "DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2 AND created_by_user_id = $3",
+        [dayId, placeId, currentUser.id],
+      );
+
+  if (!result.rowCount && !currentUser.isAdmin) {
+    sendError(res, 403, "Можно удалить только записи, которые вы добавили.");
+    return;
+  }
+
   sendJson(res, 200, { ok: true });
 }
 
@@ -734,6 +784,10 @@ async function handleApi(req, res, url) {
       }
 
       if (req.method === "DELETE" && parts.length === 4) {
+        const admin = await requireAdmin(req, res);
+        if (!admin) {
+          return;
+        }
         await deleteDayBookings(req, res, dayId);
         return;
       }
@@ -746,7 +800,7 @@ async function handleApi(req, res, url) {
       }
 
       if (req.method === "DELETE" && parts.length === 5) {
-        await deletePlaceBookings(req, res, dayId, placeId);
+        await deletePlaceBookings(req, res, dayId, placeId, currentUser);
         return;
       }
 

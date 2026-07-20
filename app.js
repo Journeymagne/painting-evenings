@@ -172,9 +172,13 @@ function getActiveBookings() {
   return getActiveDay()?.bookings || {};
 }
 
-function getBookingPlayers(placeId) {
+function getBookingSlots(placeId) {
   const players = getActiveBookings()[placeId];
   return Array.isArray(players) ? players : [];
+}
+
+function getBookingPlayers(placeId) {
+  return getBookingSlots(placeId).filter(Boolean);
 }
 
 function getUserById(userId) {
@@ -241,14 +245,13 @@ function renderAuth() {
   closeAuthButton.hidden = !user;
   openCreateDayButton.disabled = !user?.isAdmin;
   openCreateDayButton.title = user?.isAdmin ? "Создать вечер покраса" : "Создавать вечера может только админ";
-  document.body.classList.toggle("is-auth-required", !user);
-  ensureAuthGate();
+  clearAllButton.disabled = !user?.isAdmin;
+  clearAllButton.title = user?.isAdmin ? "Очистить все брони дня" : "Очищать все брони может только админ";
+  document.body.classList.remove("is-auth-required");
 }
 
 function ensureAuthGate() {
-  if (!appState.currentUser && !authDialog.open) {
-    openAuthDialog();
-  }
+  document.body.classList.remove("is-auth-required");
 }
 
 function renderUsersList() {
@@ -342,11 +345,6 @@ function openAuthDialog() {
 }
 
 function closeAuthDialog() {
-  if (!appState.currentUser) {
-    authNameInput.focus();
-    return;
-  }
-
   authForm.reset();
   authDialog.close();
 }
@@ -532,6 +530,7 @@ async function saveActiveDayTheme() {
 
 function renderCards() {
   cardsGrid.innerHTML = "";
+  const isViewOnly = !appState.currentUser;
 
   places.forEach((place) => {
     const players = getBookingPlayers(place.id);
@@ -541,8 +540,10 @@ function renderCards() {
     const stateClass = isFull ? " is-booked" : isPartial ? " is-partial" : "";
     const card = document.createElement("button");
     card.type = "button";
-    card.className = `place-card${stateClass}`;
+    card.className = `place-card${stateClass}${isViewOnly ? " is-view-only" : ""}`;
     card.setAttribute("aria-label", `${placeLabel(place)} ${getCardStatusText(place, playerCount)}`);
+    card.setAttribute("aria-disabled", String(isViewOnly));
+    card.title = isViewOnly ? "Войдите, чтобы добавлять или менять записи" : "";
     card.dataset.placeId = place.id;
 
     card.innerHTML = `
@@ -589,7 +590,7 @@ function getCardStatusText(place, playerCount) {
 function renderParticipants() {
   const rows = Object.entries(getActiveBookings())
     .flatMap(([placeId, players]) =>
-      players.map((player) => ({
+      (Array.isArray(players) ? players.filter(Boolean) : []).map((player) => ({
         place: getPlace(placeId),
         placeId,
         ...player,
@@ -645,16 +646,19 @@ function openBooking(placeId) {
   }
 
   const place = getPlace(placeId);
+  const slots = getBookingSlots(placeId);
   const players = getBookingPlayers(placeId);
+  const canRelease = Boolean(players.length && (appState.currentUser?.isAdmin || players.some((player) => player.canDelete)));
 
   placeIdInput.value = placeId;
   dialogTitle.textContent = placeLabel(place);
   bookingSlots.innerHTML = "";
-  releaseButton.classList.toggle("is-hidden", players.length === 0);
+  releaseButton.classList.toggle("is-hidden", !canRelease);
+  releaseButton.textContent = appState.currentUser?.isAdmin ? "Освободить" : "Удалить мои записи";
   formError.textContent = "";
 
   Array.from({ length: place.capacity }, (_, slotIndex) => {
-    const player = players[slotIndex] || {};
+    const player = slots[slotIndex] || {};
     bookingSlots.append(createPlayerSlot(place, player, slotIndex));
   });
 
@@ -666,7 +670,9 @@ function createPlayerSlot(place, player, slotIndex) {
   const slot = document.createElement("fieldset");
   const title = place.capacity === 1 ? "Игрок" : `Игрок ${slotIndex + 1}`;
   const hasActiveUser = Boolean(appState.currentUser);
-  slot.className = "player-slot";
+  const canEditSlot = !player.bookingId || appState.currentUser?.isAdmin || player.canDelete;
+  const disabled = canEditSlot ? "" : "disabled";
+  slot.className = `player-slot${canEditSlot ? "" : " is-readonly"}`;
   slot.innerHTML = `
     <legend>${title}</legend>
     <input class="slot-user-id" data-slot-index="${slotIndex}" type="hidden" value="${escapeAttribute(player.userId || "")}" />
@@ -675,13 +681,13 @@ function createPlayerSlot(place, player, slotIndex) {
         class="ghost-button use-current-user-button"
         type="button"
         data-slot-index="${slotIndex}"
-        ${hasActiveUser ? "" : "disabled"}
+        ${hasActiveUser && canEditSlot ? "" : "disabled"}
       >
         Подставить себя
       </button>
       <label class="field compact-field">
         <span>Зарегистрированный юзер</span>
-        <select class="slot-user-select" data-slot-index="${slotIndex}" ${appState.users.length ? "" : "disabled"}>
+        <select class="slot-user-select" data-slot-index="${slotIndex}" ${appState.users.length && canEditSlot ? "" : "disabled"}>
           ${getUserOptionsHtml(player.userId || "")}
         </select>
       </label>
@@ -695,6 +701,7 @@ function createPlayerSlot(place, player, slotIndex) {
           type="text"
           autocomplete="name"
           value="${escapeAttribute(player.name || "")}"
+          ${disabled}
         />
       </label>
       <label class="field">
@@ -706,6 +713,7 @@ function createPlayerSlot(place, player, slotIndex) {
           autocomplete="off"
           placeholder="@username"
           value="${escapeAttribute(player.telegram || "")}"
+          ${disabled}
         />
       </label>
       <label class="field">
@@ -718,6 +726,7 @@ function createPlayerSlot(place, player, slotIndex) {
           maxlength="5"
           placeholder="чч:мм"
           value="${escapeAttribute(player.time || "")}"
+          ${disabled}
         />
       </label>
     </div>
@@ -811,7 +820,7 @@ function applyUserToSlot(slotIndex, user) {
 }
 
 function collectPlayers(place) {
-  const currentPlayers = getBookingPlayers(place.id);
+  const currentPlayers = getBookingSlots(place.id);
   const players = [];
 
   for (let slotIndex = 0; slotIndex < place.capacity; slotIndex += 1) {
@@ -1040,6 +1049,11 @@ cancelCreateDayButton.addEventListener("click", closeCreateDay);
 
 clearAllButton.addEventListener("click", async () => {
   const activeDay = getActiveDay();
+  if (!appState.currentUser?.isAdmin) {
+    window.alert("Очищать все брони может только админ.");
+    return;
+  }
+
   if (!activeDay || !Object.keys(activeDay.bookings || {}).length) {
     return;
   }
@@ -1075,10 +1089,8 @@ authDialog.addEventListener("click", (event) => {
   }
 });
 
-authDialog.addEventListener("cancel", (event) => {
-  if (!appState.currentUser) {
-    event.preventDefault();
-  }
+authDialog.addEventListener("cancel", () => {
+  setAuthMessage("");
 });
 
 usersDialog.addEventListener("click", (event) => {
