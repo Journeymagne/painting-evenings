@@ -543,6 +543,7 @@ function renderCards() {
     card.className = `place-card${stateClass}${isViewOnly ? " is-view-only" : ""}`;
     card.setAttribute("aria-label", `${placeLabel(place)} ${getCardStatusText(place, playerCount)}`);
     card.setAttribute("aria-disabled", String(isViewOnly));
+    card.disabled = isViewOnly;
     card.title = isViewOnly ? "Войдите, чтобы добавлять или менять записи" : "";
     card.dataset.placeId = place.id;
 
@@ -557,7 +558,9 @@ function renderCards() {
       </span>
     `;
 
-    card.addEventListener("click", () => openBooking(place.id));
+    if (!isViewOnly) {
+      card.addEventListener("click", () => openBooking(place.id));
+    }
     cardsGrid.append(card);
   });
 }

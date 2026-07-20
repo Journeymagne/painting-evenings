@@ -499,6 +499,7 @@ h2 {
 
 .place-card.is-view-only {
   cursor: default;
+  opacity: 1;
 }
 
 .place-card.is-view-only:hover,
