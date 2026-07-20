@@ -608,27 +608,27 @@ th {
 
 .participants th:nth-child(1),
 .participants td:nth-child(1) {
-  width: 18%;
+  width: 17%;
 }
 
 .participants th:nth-child(2),
 .participants td:nth-child(2) {
-  width: 19%;
+  width: 18%;
 }
 
 .participants th:nth-child(3),
 .participants td:nth-child(3) {
-  width: 12%;
+  width: 10%;
 }
 
 .participants th:nth-child(4),
 .participants td:nth-child(4) {
-  width: 35%;
+  width: 32%;
 }
 
 .participants th:nth-child(5),
 .participants td:nth-child(5) {
-  width: 16%;
+  width: 23%;
 }
 
 .participants td {
@@ -647,9 +647,17 @@ tbody tr.is-paid td {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   color: var(--accent-dark);
   font-weight: 800;
   white-space: nowrap;
+}
+
+.paid-check span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .paid-check.is-readonly {
