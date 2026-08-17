@@ -51,6 +51,10 @@ function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 120000, 32, "sha256").toString("hex");
 }
 
+function generateTemporaryPassword() {
+  return `paint-${crypto.randomBytes(6).toString("base64url")}`;
+}
+
 function publicUser(row) {
   if (!row) {
     return null;
@@ -88,6 +92,7 @@ async function initDb() {
       id TEXT PRIMARY KEY,
       paint_date DATE NOT NULL UNIQUE,
       theme TEXT NOT NULL DEFAULT '',
+      is_archived BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -100,7 +105,7 @@ async function initDb() {
       created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       guest_name TEXT NOT NULL,
       telegram TEXT NOT NULL,
-      arrival_time TIME NOT NULL,
+      arrival_time TIME,
       paid BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -110,7 +115,9 @@ async function initDb() {
 
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false");
   await pool.query("ALTER TABLE paint_days ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT ''");
+  await pool.query("ALTER TABLE paint_days ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false");
   await pool.query("ALTER TABLE booking_slots ADD COLUMN IF NOT EXISTS created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL");
+  await pool.query("ALTER TABLE booking_slots ALTER COLUMN arrival_time DROP NOT NULL");
   await pool.query("UPDATE booking_slots SET created_by_user_id = user_id WHERE created_by_user_id IS NULL");
   await pool.query(`
     UPDATE users
@@ -222,7 +229,7 @@ async function getState(req, res) {
   const currentUser = await getCurrentUser(req);
 
   const [daysResult, bookingsResult, usersResult] = await Promise.all([
-    pool.query("SELECT id, paint_date::text AS date, theme FROM paint_days ORDER BY paint_date, id"),
+    pool.query('SELECT id, paint_date::text AS date, theme, is_archived AS "isArchived" FROM paint_days ORDER BY paint_date, id'),
     pool.query(`
       SELECT
         id,
@@ -249,6 +256,7 @@ async function getState(req, res) {
       id: row.id,
       date: row.date,
       theme: row.theme || "",
+      isArchived: Boolean(row.isArchived),
       bookings: {},
     };
     dayMap.set(day.id, day);
@@ -447,6 +455,7 @@ async function createDay(req, res) {
     id: createId("day"),
     date,
     theme,
+    isArchived: false,
   };
 
   try {
@@ -485,14 +494,14 @@ async function updateDayTheme(req, res, dayId) {
     `
       UPDATE paint_days
       SET theme = $1
-      WHERE id = $2
+      WHERE id = $2 AND is_archived = false
       RETURNING id, paint_date::text AS date, theme
     `,
     [theme, dayId],
   );
 
   if (!result.rowCount) {
-    sendError(res, 404, "Вечер не найден.");
+    sendError(res, 404, "Вечер не найден или находится в архиве.");
     return;
   }
 
@@ -512,9 +521,13 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
     return;
   }
 
-  const dayResult = await pool.query("SELECT id FROM paint_days WHERE id = $1", [dayId]);
+  const dayResult = await pool.query("SELECT id, is_archived AS \"isArchived\" FROM paint_days WHERE id = $1", [dayId]);
   if (!dayResult.rowCount) {
     sendError(res, 404, "Вечер не найден.");
+    return;
+  }
+  if (dayResult.rows[0].isArchived) {
+    sendError(res, 403, "Архивный вечер доступен только для просмотра.");
     return;
   }
 
@@ -584,8 +597,8 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
   }
 
   for (const player of players) {
-    if (!player.name || !player.telegram || !isValidTime(player.time)) {
-      sendError(res, 400, "У каждого игрока должны быть имя, Telegram и время в формате чч:мм.");
+    if (!player.name || !player.telegram || (player.time && !isValidTime(player.time))) {
+      sendError(res, 400, "У каждого игрока должны быть имя и Telegram. Время, если указано, должно быть в формате чч:мм.");
       return;
     }
   }
@@ -621,7 +634,7 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
           player.createdByUserId,
           player.name,
           player.telegram,
-          player.time,
+          player.time || null,
           player.paid,
         ],
       );
@@ -638,6 +651,10 @@ async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
 }
 
 async function deletePlaceBookings(req, res, dayId, placeId, currentUser) {
+  if (!(await ensureDayEditable(res, dayId))) {
+    return;
+  }
+
   const result = currentUser.isAdmin
     ? await pool.query("DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2", [dayId, placeId])
     : await pool.query(
@@ -653,12 +670,48 @@ async function deletePlaceBookings(req, res, dayId, placeId, currentUser) {
   sendJson(res, 200, { ok: true });
 }
 
+async function updateDayArchive(req, res, dayId) {
+  const body = await readBody(req);
+  const isArchived = Boolean(body.isArchived);
+  const result = await pool.query(
+    `
+      UPDATE paint_days
+      SET is_archived = $1
+      WHERE id = $2
+      RETURNING id, paint_date::text AS date, theme, is_archived AS "isArchived"
+    `,
+    [isArchived, dayId],
+  );
+
+  if (!result.rowCount) {
+    sendError(res, 404, "Вечер не найден.");
+    return;
+  }
+
+  sendJson(res, 200, {
+    day: {
+      id: result.rows[0].id,
+      date: result.rows[0].date,
+      theme: result.rows[0].theme || "",
+      isArchived: Boolean(result.rows[0].isArchived),
+    },
+  });
+}
+
 async function deleteDayBookings(req, res, dayId) {
+  if (!(await ensureDayEditable(res, dayId))) {
+    return;
+  }
+
   await pool.query("DELETE FROM booking_slots WHERE day_id = $1", [dayId]);
   sendJson(res, 200, { ok: true });
 }
 
 async function updatePaid(req, res, dayId, placeId, slotIndex) {
+  if (!(await ensureDayEditable(res, dayId))) {
+    return;
+  }
+
   const body = await readBody(req);
   const paid = Boolean(body.paid);
   const numericSlotIndex = Number(slotIndex);
@@ -685,6 +738,21 @@ async function updatePaid(req, res, dayId, placeId, slotIndex) {
   sendJson(res, 200, { ok: true });
 }
 
+async function ensureDayEditable(res, dayId) {
+  const dayResult = await pool.query("SELECT is_archived AS \"isArchived\" FROM paint_days WHERE id = $1", [dayId]);
+  if (!dayResult.rowCount) {
+    sendError(res, 404, "Вечер не найден.");
+    return false;
+  }
+
+  if (dayResult.rows[0].isArchived) {
+    sendError(res, 403, "Архивный вечер доступен только для просмотра.");
+    return false;
+  }
+
+  return true;
+}
+
 async function grantAdmin(req, res, userId) {
   const result = await pool.query(
     `
@@ -704,6 +772,49 @@ async function grantAdmin(req, res, userId) {
   sendJson(res, 200, {
     user: publicUser(result.rows[0]),
   });
+}
+
+async function resetUserTemporaryPassword(req, res, userId, currentUser) {
+  if (userId === currentUser.id) {
+    sendError(res, 400, "Для своего аккаунта меняйте пароль через профиль.");
+    return;
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const salt = crypto.randomBytes(16).toString("hex");
+  const passwordHash = hashPassword(temporaryPassword, salt);
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `
+        UPDATE users
+        SET password_salt = $1, password_hash = $2
+        WHERE id = $3
+        RETURNING id, name, telegram, is_admin AS "isAdmin"
+      `,
+      [salt, passwordHash, userId],
+    );
+
+    if (!result.rowCount) {
+      await client.query("ROLLBACK");
+      sendError(res, 404, "Пользователь не найден.");
+      return;
+    }
+
+    await client.query("DELETE FROM user_sessions WHERE user_id = $1", [userId]);
+    await client.query("COMMIT");
+    sendJson(res, 200, {
+      user: publicUser(result.rows[0]),
+      temporaryPassword,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function handleApi(req, res, url) {
@@ -756,6 +867,22 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (
+    req.method === "POST" &&
+    parts[0] === "api" &&
+    parts[1] === "admin" &&
+    parts[2] === "users" &&
+    parts[3] &&
+    parts[4] === "temporary-password"
+  ) {
+    const admin = await requireAdmin(req, res);
+    if (!admin) {
+      return;
+    }
+    await resetUserTemporaryPassword(req, res, decodeURIComponent(parts[3]), admin);
+    return;
+  }
+
   if (parts[0] === "api" && parts[1] === "days" && parts[2]) {
     const dayId = decodeURIComponent(parts[2]);
 
@@ -774,6 +901,15 @@ async function handleApi(req, res, url) {
         return;
       }
       await updateDayTheme(req, res, dayId);
+      return;
+    }
+
+    if (req.method === "PATCH" && parts.length === 4 && parts[3] === "archive") {
+      const admin = await requireAdmin(req, res);
+      if (!admin) {
+        return;
+      }
+      await updateDayArchive(req, res, dayId);
       return;
     }
 
@@ -827,15 +963,21 @@ async function serveStatic(req, res, url) {
   ]);
   const filename = staticFiles.get(url.pathname);
 
-  if (!filename) {
+  if (!filename && (url.pathname.startsWith("/days/") || url.pathname === "/archive" || url.pathname.startsWith("/archive/"))) {
+    staticFiles.set(url.pathname, "index.html");
+  }
+
+  const resolvedFilename = staticFiles.get(url.pathname);
+
+  if (!resolvedFilename) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Not found");
     return;
   }
 
-  const filePath = path.join(__dirname, filename);
+  const filePath = path.join(__dirname, resolvedFilename);
   const content = await fs.readFile(filePath);
-  const ext = path.extname(filename);
+  const ext = path.extname(resolvedFilename);
   const contentType =
     ext === ".html"
       ? "text/html; charset=utf-8"

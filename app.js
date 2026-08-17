@@ -40,6 +40,8 @@ const openAuthButton = document.querySelector("#openAuthButton");
 const manageUsersButton = document.querySelector("#manageUsersButton");
 const logoutButton = document.querySelector("#logoutButton");
 const dayTabs = document.querySelector("#dayTabs");
+const activeViewButton = document.querySelector("#activeViewButton");
+const archiveViewButton = document.querySelector("#archiveViewButton");
 const dayThemeForm = document.querySelector("#dayThemeForm");
 const dayThemeInput = document.querySelector("#dayThemeInput");
 const saveDayThemeButton = document.querySelector("#saveDayThemeButton");
@@ -70,6 +72,17 @@ const usersDialog = document.querySelector("#usersDialog");
 const usersBody = document.querySelector("#usersBody");
 const usersTableWrap = document.querySelector(".users-table-wrap");
 const closeUsersButton = document.querySelector("#closeUsersButton");
+const userProfileDialog = document.querySelector("#userProfileDialog");
+const userProfileName = document.querySelector("#userProfileName");
+const userProfileTelegram = document.querySelector("#userProfileTelegram");
+const userProfileRole = document.querySelector("#userProfileRole");
+const userProfileMessage = document.querySelector("#userProfileMessage");
+const tempPasswordBox = document.querySelector("#tempPasswordBox");
+const tempPasswordInput = document.querySelector("#tempPasswordInput");
+const copyTempPasswordButton = document.querySelector("#copyTempPasswordButton");
+const resetUserPasswordButton = document.querySelector("#resetUserPasswordButton");
+const grantProfileAdminButton = document.querySelector("#grantProfileAdminButton");
+const closeUserProfileButton = document.querySelector("#closeUserProfileButton");
 const bookingDialog = document.querySelector("#bookingDialog");
 const bookingForm = document.querySelector("#bookingForm");
 const bookingSlots = document.querySelector("#bookingSlots");
@@ -79,6 +92,7 @@ const formError = document.querySelector("#formError");
 const releaseButton = document.querySelector("#releaseButton");
 const closeDialogButton = document.querySelector("#closeDialogButton");
 const clearAllButton = document.querySelector("#clearAllButton");
+const archiveDayButton = document.querySelector("#archiveDayButton");
 const openCreateDayButton = document.querySelector("#openCreateDayButton");
 const createDayDialog = document.querySelector("#createDayDialog");
 const createDayForm = document.querySelector("#createDayForm");
@@ -90,6 +104,8 @@ const cancelCreateDayButton = document.querySelector("#cancelCreateDayButton");
 
 let appState = {
   activeDayId: null,
+  viewMode: "active",
+  selectedUserId: null,
   currentUser: null,
   days: [],
   users: [],
@@ -107,6 +123,43 @@ function setToken(token) {
   }
 
   localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+function getRouteState() {
+  const archiveMatch = window.location.pathname.match(/^\/archive(?:\/([^/]+))?\/?$/);
+  if (archiveMatch) {
+    return {
+      viewMode: "archive",
+      dayId: archiveMatch[1] ? decodeURIComponent(archiveMatch[1]) : null,
+    };
+  }
+
+  const dayMatch = window.location.pathname.match(/^\/days\/([^/]+)\/?$/);
+  return {
+    viewMode: "active",
+    dayId: dayMatch?.[1] ? decodeURIComponent(dayMatch[1]) : null,
+  };
+}
+
+function getDayUrl(day, viewMode = day?.isArchived ? "archive" : "active") {
+  if (!day) {
+    return viewMode === "archive" ? "/archive" : "/";
+  }
+
+  const encodedId = encodeURIComponent(day.id);
+  return viewMode === "archive" ? `/archive/${encodedId}` : `/days/${encodedId}`;
+}
+
+function updateUrlForActiveDay(replace = false) {
+  const activeDay = getActiveDay();
+  const url = getDayUrl(activeDay, appState.viewMode);
+
+  if (window.location.pathname === url) {
+    return;
+  }
+
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method]({}, "", url);
 }
 
 async function apiFetch(path, options = {}) {
@@ -143,13 +196,19 @@ async function apiFetch(path, options = {}) {
 
 async function loadApp(preferredDayId = appState.activeDayId) {
   try {
+    const route = getRouteState();
     const data = await apiFetch("/api/state");
     appState.days = data.days || [];
     appState.users = data.users || [];
     appState.currentUser = data.currentUser || null;
-    appState.activeDayId = appState.days.some((day) => day.id === preferredDayId)
-      ? preferredDayId
-      : appState.days[0]?.id || null;
+    appState.viewMode = route.viewMode;
+
+    const visibleDays = getVisibleDays();
+    const requestedDayId = route.dayId || preferredDayId;
+    appState.activeDayId = visibleDays.some((day) => day.id === requestedDayId)
+      ? requestedDayId
+      : visibleDays[0]?.id || null;
+    updateUrlForActiveDay(true);
     render();
   } catch (error) {
     currentDayDate.textContent = "Сервер недоступен";
@@ -165,7 +224,12 @@ function getPlace(placeId) {
 }
 
 function getActiveDay() {
-  return appState.days.find((day) => day.id === appState.activeDayId) || appState.days[0] || null;
+  const visibleDays = getVisibleDays();
+  return visibleDays.find((day) => day.id === appState.activeDayId) || visibleDays[0] || null;
+}
+
+function getVisibleDays() {
+  return appState.days.filter((day) => Boolean(day.isArchived) === (appState.viewMode === "archive"));
 }
 
 function getActiveBookings() {
@@ -183,6 +247,10 @@ function getBookingPlayers(placeId) {
 
 function getUserById(userId) {
   return appState.users.find((user) => user.id === userId);
+}
+
+function getSelectedUser() {
+  return getUserById(appState.selectedUserId);
 }
 
 function isDateValue(value) {
@@ -236,6 +304,8 @@ function isValidTime(value) {
 
 function renderAuth() {
   const user = appState.currentUser;
+  const activeDay = getActiveDay();
+  const isArchived = Boolean(activeDay?.isArchived);
   const role = user?.isAdmin ? " · админ" : "";
   accountStatus.textContent = user ? `${user.name} · ${user.telegram}${role}` : "Не вошли";
   authStatus.textContent = user ? "Можно изменить имя, пароль и телеграм контакт." : "Войдите или зарегистрируйтесь";
@@ -243,10 +313,25 @@ function renderAuth() {
   manageUsersButton.hidden = !user?.isAdmin;
   logoutButton.hidden = !user;
   closeAuthButton.hidden = !user;
-  openCreateDayButton.disabled = !user?.isAdmin;
+  openCreateDayButton.hidden = appState.viewMode === "archive";
+  openCreateDayButton.disabled = !user?.isAdmin || appState.viewMode === "archive";
   openCreateDayButton.title = user?.isAdmin ? "Создать вечер покраса" : "Создавать вечера может только админ";
-  clearAllButton.disabled = !user?.isAdmin;
-  clearAllButton.title = user?.isAdmin ? "Очистить все брони дня" : "Очищать все брони может только админ";
+  clearAllButton.disabled = !activeDay || !user?.isAdmin || isArchived;
+  clearAllButton.title = !activeDay
+    ? "Сначала выберите вечер покраса"
+    : isArchived
+    ? "Архивные вечера доступны только для просмотра"
+    : user?.isAdmin
+      ? "Очистить все брони дня"
+      : "Очищать все брони может только админ";
+  archiveDayButton.hidden = !activeDay;
+  archiveDayButton.disabled = !user?.isAdmin;
+  archiveDayButton.textContent = isArchived ? "Вернуть" : "В архив";
+  archiveDayButton.title = user?.isAdmin
+    ? isArchived
+      ? "Вернуть вечер из архива"
+      : "Отправить вечер в архив"
+    : "Архивировать вечера может только админ";
   document.body.classList.remove("is-auth-required");
 }
 
@@ -261,15 +346,16 @@ function renderUsersList() {
   appState.users.forEach((user) => {
     const tr = document.createElement("tr");
     const isSelf = user.id === appState.currentUser?.id;
-    const action = user.isAdmin
+    const adminAction = user.isAdmin
       ? "Админ"
       : `<button class="primary-button compact-button grant-admin-button" type="button" data-user-id="${escapeAttribute(user.id)}">Сделать админом</button>`;
+    const profileAction = `<button class="ghost-button compact-button open-user-profile-button" type="button" data-user-id="${escapeAttribute(user.id)}">Профиль</button>`;
 
     tr.innerHTML = `
       <td>${escapeHtml(user.name)}${isSelf ? " (вы)" : ""}</td>
       <td>${escapeHtml(user.telegram)}</td>
       <td>${user.isAdmin ? "Админ" : "Пользователь"}</td>
-      <td>${action}</td>
+      <td><div class="user-actions">${profileAction}${adminAction}</div></td>
     `;
     usersBody.append(tr);
   });
@@ -287,6 +373,56 @@ function openUsersDialog() {
 
 function closeUsersDialog() {
   usersDialog.close();
+}
+
+function setUserProfileMessage(message, type = "error") {
+  userProfileMessage.textContent = message || "";
+  userProfileMessage.classList.toggle("is-success", type === "success");
+}
+
+function renderUserProfile() {
+  const user = getSelectedUser();
+  if (!user) {
+    closeUserProfile();
+    return;
+  }
+
+  const isSelf = user.id === appState.currentUser?.id;
+  userProfileName.textContent = user.name;
+  userProfileTelegram.textContent = user.telegram;
+  userProfileRole.textContent = user.isAdmin ? "Админ" : "Пользователь";
+  grantProfileAdminButton.hidden = user.isAdmin;
+  grantProfileAdminButton.disabled = user.isAdmin;
+  resetUserPasswordButton.disabled = isSelf;
+  resetUserPasswordButton.title = isSelf
+    ? "Для своего аккаунта меняйте пароль через профиль"
+    : "Сгенерировать новый временный пароль";
+}
+
+function openUserProfile(userId) {
+  if (!appState.currentUser?.isAdmin) {
+    window.alert("Профили пользователей доступны только админу.");
+    return;
+  }
+
+  appState.selectedUserId = userId;
+  if (!getSelectedUser()) {
+    window.alert("Пользователь не найден.");
+    return;
+  }
+
+  tempPasswordBox.hidden = true;
+  tempPasswordInput.value = "";
+  setUserProfileMessage("");
+  renderUserProfile();
+  userProfileDialog.showModal();
+}
+
+function closeUserProfile() {
+  tempPasswordBox.hidden = true;
+  tempPasswordInput.value = "";
+  setUserProfileMessage("");
+  userProfileDialog.close();
 }
 
 function setAuthMessage(message, type = "error") {
@@ -437,31 +573,79 @@ async function grantAdminToUser(userId) {
     });
     await loadApp(appState.activeDayId);
     renderUsersList();
+    if (userProfileDialog.open) {
+      renderUserProfile();
+      setUserProfileMessage("Пользователь получил права админа.", "success");
+    }
   } catch (error) {
     window.alert(error.message);
+  }
+}
+
+async function resetTemporaryPasswordForSelectedUser() {
+  const user = getSelectedUser();
+  if (!user) {
+    return;
+  }
+
+  const confirmed = window.confirm(`Сгенерить новый временный пароль для ${user.name}? Старый пароль перестанет работать.`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const data = await apiFetch(`/api/admin/users/${encodeURIComponent(user.id)}/temporary-password`, {
+      method: "POST",
+    });
+    tempPasswordInput.value = data.temporaryPassword;
+    tempPasswordBox.hidden = false;
+    setUserProfileMessage("Временный пароль создан. Передайте его пользователю, чтобы он вошёл и сменил пароль.", "success");
+  } catch (error) {
+    setUserProfileMessage(error.message);
+  }
+}
+
+async function copyTemporaryPassword() {
+  const password = tempPasswordInput.value;
+  if (!password) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(password);
+    setUserProfileMessage("Временный пароль скопирован.", "success");
+  } catch {
+    tempPasswordInput.select();
+    setUserProfileMessage("Не удалось скопировать автоматически. Пароль выделен в поле.", "error");
   }
 }
 
 function renderDayTabs() {
   dayTabs.innerHTML = "";
   const isAdmin = Boolean(appState.currentUser?.isAdmin);
+  const visibleDays = getVisibleDays();
 
-  appState.days.forEach((day) => {
+  activeViewButton.classList.toggle("is-active", appState.viewMode === "active");
+  archiveViewButton.classList.toggle("is-active", appState.viewMode === "archive");
+
+  visibleDays.forEach((day) => {
     const isActive = day.id === appState.activeDayId;
     const tabItem = document.createElement("div");
-    const tab = document.createElement("button");
+    const tab = document.createElement("a");
     const deleteButton = document.createElement("button");
 
     tabItem.className = `day-tab${isActive ? " is-active" : ""}`;
     tabItem.setAttribute("role", "presentation");
 
-    tab.type = "button";
     tab.className = `tab${isActive ? " is-active" : ""}`;
+    tab.href = getDayUrl(day, appState.viewMode);
     tab.setAttribute("role", "tab");
     tab.setAttribute("aria-selected", String(isActive));
     tab.textContent = `Вечер покраса ${formatDate(day.date)}`;
-    tab.addEventListener("click", () => {
+    tab.addEventListener("click", (event) => {
+      event.preventDefault();
       appState.activeDayId = day.id;
+      updateUrlForActiveDay();
       render();
     });
 
@@ -480,6 +664,13 @@ function renderDayTabs() {
     tabItem.append(tab, deleteButton);
     dayTabs.append(tabItem);
   });
+
+  if (!visibleDays.length) {
+    const empty = document.createElement("span");
+    empty.className = "tabs-empty";
+    empty.textContent = appState.viewMode === "archive" ? "Архив пока пуст" : "Активных вечеров пока нет";
+    dayTabs.append(empty);
+  }
 }
 
 async function deleteDay(dayId) {
@@ -508,6 +699,11 @@ async function saveActiveDayTheme() {
     return;
   }
 
+  if (activeDay.isArchived) {
+    window.alert("Архивный вечер доступен только для просмотра.");
+    return;
+  }
+
   if (!appState.currentUser?.isAdmin) {
     window.alert("Менять тематику дня может только админ.");
     return;
@@ -528,9 +724,49 @@ async function saveActiveDayTheme() {
   }
 }
 
+async function toggleActiveDayArchive() {
+  const activeDay = getActiveDay();
+  if (!activeDay) {
+    return;
+  }
+
+  if (!appState.currentUser?.isAdmin) {
+    window.alert("Архивировать вечера может только админ.");
+    return;
+  }
+
+  const nextArchivedState = !activeDay.isArchived;
+  const confirmed = window.confirm(
+    nextArchivedState
+      ? `Отправить вечер покраса ${formatDate(activeDay.date)} в архив?`
+      : `Вернуть вечер покраса ${formatDate(activeDay.date)} из архива?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const data = await apiFetch(`/api/days/${encodeURIComponent(activeDay.id)}/archive`, {
+      method: "PATCH",
+      body: { isArchived: nextArchivedState },
+    });
+    const day = appState.days.find((item) => item.id === activeDay.id);
+    if (day) {
+      day.isArchived = data.day.isArchived;
+    }
+    appState.viewMode = nextArchivedState ? "archive" : "active";
+    appState.activeDayId = data.day.id;
+    updateUrlForActiveDay();
+    await loadApp(data.day.id);
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
 function renderCards() {
   cardsGrid.innerHTML = "";
-  const isViewOnly = !appState.currentUser;
+  const activeDay = getActiveDay();
+  const isViewOnly = !appState.currentUser || !activeDay || Boolean(activeDay.isArchived);
 
   places.forEach((place) => {
     const players = getBookingPlayers(place.id);
@@ -544,7 +780,13 @@ function renderCards() {
     card.setAttribute("aria-label", `${placeLabel(place)} ${getCardStatusText(place, playerCount)}`);
     card.setAttribute("aria-disabled", String(isViewOnly));
     card.disabled = isViewOnly;
-    card.title = isViewOnly ? "Войдите, чтобы добавлять или менять записи" : "";
+    card.title = !appState.currentUser
+      ? "Войдите, чтобы добавлять или менять записи"
+      : !activeDay
+        ? "Сначала выберите или создайте вечер покраса"
+      : activeDay?.isArchived
+        ? "Архивный вечер доступен только для просмотра"
+        : "";
     card.dataset.placeId = place.id;
 
     card.innerHTML = `
@@ -571,7 +813,7 @@ function getCardSummary(place, players) {
   }
 
   if (place.capacity === 1) {
-    return `${players[0].name}, ${players[0].time}`;
+    return players[0].time ? `${players[0].name}, ${players[0].time}` : `${players[0].name}, время не указано`;
   }
 
   const names = players.map((player) => player.name).join(", ");
@@ -600,11 +842,11 @@ function renderParticipants() {
       })),
     )
     .filter((row) => row.place)
-    .sort((a, b) => a.time.localeCompare(b.time) || placeLabel(a.place).localeCompare(placeLabel(b.place)));
+    .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99") || placeLabel(a.place).localeCompare(placeLabel(b.place)));
 
   participantsBody.innerHTML = "";
   tableWrap.classList.toggle("has-rows", rows.length > 0);
-  const canManagePayments = Boolean(appState.currentUser?.isAdmin);
+  const canManagePayments = Boolean(appState.currentUser?.isAdmin && !getActiveDay()?.isArchived);
 
   rows.forEach((row) => {
     const tr = document.createElement("tr");
@@ -613,7 +855,7 @@ function renderParticipants() {
     tr.innerHTML = `
       <td data-label="Имя">${escapeHtml(row.name)}</td>
       <td data-label="Телеграм">${escapeHtml(row.telegram)}</td>
-      <td data-label="Время">${escapeHtml(row.time)}</td>
+      <td data-label="Время">${escapeHtml(row.time || "—")}</td>
       <td data-label="Стол">${escapeHtml(placeText)}</td>
       <td data-label="Оплатил">
         <label class="paid-check${canManagePayments ? "" : " is-readonly"}" title="${canManagePayments ? "Отметить оплату" : "Оплату может отметить только админ"}">
@@ -731,6 +973,7 @@ function createPlayerSlot(place, player, slotIndex) {
           value="${escapeAttribute(player.time || "")}"
           ${disabled}
         />
+        <small class="field-hint">Необязательно. Если знаешь время, укажи в формате чч:мм.</small>
       </label>
     </div>
   `;
@@ -839,13 +1082,13 @@ function collectPlayers(place) {
       continue;
     }
 
-    if (!name || !telegram || !time) {
+    if (!name || !telegram) {
       return {
-        error: place.capacity === 1 ? "Заполни имя, телеграм и время." : `Заполни все поля у игрока ${slotIndex + 1}.`,
+        error: place.capacity === 1 ? "Заполни имя и телеграм." : `Заполни имя и телеграм у игрока ${slotIndex + 1}.`,
       };
     }
 
-    if (!isValidTime(time)) {
+    if (time && !isValidTime(time)) {
       return {
         error:
           place.capacity === 1
@@ -866,11 +1109,14 @@ function collectPlayers(place) {
 
   if (!players.length) {
     return {
-      error: place.capacity === 1 ? "Заполни имя, телеграм и время." : "Добавь хотя бы одного игрока.",
+      error: place.capacity === 1 ? "Заполни имя и телеграм." : "Добавь хотя бы одного игрока.",
     };
   }
 
-  return { players };
+  return {
+    players,
+    hasMissingTime: players.some((player) => !player.time),
+  };
 }
 
 bookingForm.addEventListener("submit", async (event) => {
@@ -895,6 +1141,9 @@ bookingForm.addEventListener("submit", async (event) => {
     });
     closeBooking();
     await loadApp(activeDay.id);
+    if (result.hasMissingTime) {
+      window.alert("Бронь сохранена. Время прихода не указано — напомни человеку добавить его позже.");
+    }
   } catch (error) {
     formError.textContent = error.message;
   }
@@ -916,6 +1165,9 @@ createDayForm.addEventListener("submit", async (event) => {
       body: { date, theme },
     });
     closeCreateDay();
+    appState.viewMode = "active";
+    appState.activeDayId = data.day.id;
+    window.history.pushState({}, "", getDayUrl(data.day, "active"));
     await loadApp(data.day.id);
   } catch (error) {
     dayFormError.textContent = error.message;
@@ -943,19 +1195,53 @@ openAuthButton.addEventListener("click", openAuthDialog);
 closeAuthButton.addEventListener("click", closeAuthDialog);
 manageUsersButton.addEventListener("click", openUsersDialog);
 closeUsersButton.addEventListener("click", closeUsersDialog);
+closeUserProfileButton.addEventListener("click", closeUserProfile);
+grantProfileAdminButton.addEventListener("click", () => {
+  const user = getSelectedUser();
+  if (user) {
+    grantAdminToUser(user.id);
+  }
+});
+resetUserPasswordButton.addEventListener("click", resetTemporaryPasswordForSelectedUser);
+copyTempPasswordButton.addEventListener("click", copyTemporaryPassword);
 logoutButton.addEventListener("click", logoutUser);
+
+activeViewButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  appState.viewMode = "active";
+  appState.activeDayId = getVisibleDays()[0]?.id || null;
+  updateUrlForActiveDay();
+  render();
+});
+
+archiveViewButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  appState.viewMode = "archive";
+  appState.activeDayId = getVisibleDays()[0]?.id || null;
+  updateUrlForActiveDay();
+  render();
+});
 
 dayThemeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   saveActiveDayTheme();
 });
 
+archiveDayButton.addEventListener("click", toggleActiveDayArchive);
+
 usersBody.addEventListener("click", (event) => {
-  if (!(event.target instanceof HTMLButtonElement) || !event.target.classList.contains("grant-admin-button")) {
+  if (!(event.target instanceof HTMLButtonElement)) {
     return;
   }
 
-  grantAdminToUser(event.target.dataset.userId);
+  if (event.target.classList.contains("grant-admin-button")) {
+    grantAdminToUser(event.target.dataset.userId);
+    return;
+  }
+
+  if (event.target.classList.contains("open-user-profile-button")) {
+    openUserProfile(event.target.dataset.userId);
+  }
 });
 
 bookingSlots.addEventListener("click", (event) => {
@@ -1006,6 +1292,12 @@ participantsBody.addEventListener("change", async (event) => {
   }
 
   const activeDay = getActiveDay();
+  if (activeDay?.isArchived) {
+    event.target.checked = !event.target.checked;
+    window.alert("Архивный вечер доступен только для просмотра.");
+    return;
+  }
+
   if (!appState.currentUser?.isAdmin) {
     event.target.checked = !event.target.checked;
     window.alert("Отмечать оплату может только админ.");
@@ -1033,6 +1325,10 @@ participantsBody.addEventListener("change", async (event) => {
 releaseButton.addEventListener("click", async () => {
   const activeDay = getActiveDay();
   const placeId = placeIdInput.value;
+  if (activeDay?.isArchived) {
+    formError.textContent = "Архивный вечер доступен только для просмотра.";
+    return;
+  }
 
   try {
     await apiFetch(`/api/days/${encodeURIComponent(activeDay.id)}/bookings/${encodeURIComponent(placeId)}`, {
@@ -1052,6 +1348,11 @@ cancelCreateDayButton.addEventListener("click", closeCreateDay);
 
 clearAllButton.addEventListener("click", async () => {
   const activeDay = getActiveDay();
+  if (activeDay?.isArchived) {
+    window.alert("Архивный вечер доступен только для просмотра.");
+    return;
+  }
+
   if (!appState.currentUser?.isAdmin) {
     window.alert("Очищать все брони может только админ.");
     return;
@@ -1102,12 +1403,31 @@ usersDialog.addEventListener("click", (event) => {
   }
 });
 
+userProfileDialog.addEventListener("click", (event) => {
+  if (event.target === userProfileDialog) {
+    closeUserProfile();
+  }
+});
+
+window.addEventListener("popstate", () => {
+  const route = getRouteState();
+  appState.viewMode = route.viewMode;
+  appState.activeDayId = getVisibleDays().some((day) => day.id === route.dayId)
+    ? route.dayId
+    : getVisibleDays()[0]?.id || null;
+  render();
+});
+
 function render() {
   const activeDay = getActiveDay();
-  currentDayDate.textContent = activeDay ? `Дата: ${formatDate(activeDay.date)}` : "Дней пока нет";
+  currentDayDate.textContent = activeDay
+    ? `${activeDay.isArchived ? "Архив · " : ""}Дата: ${formatDate(activeDay.date)}`
+    : appState.viewMode === "archive"
+      ? "Архив пока пуст"
+      : "Дней пока нет";
   dayThemeInput.value = activeDay?.theme || "";
-  dayThemeInput.disabled = !activeDay || !appState.currentUser?.isAdmin;
-  saveDayThemeButton.disabled = !activeDay || !appState.currentUser?.isAdmin;
+  dayThemeInput.disabled = !activeDay || !appState.currentUser?.isAdmin || activeDay.isArchived;
+  saveDayThemeButton.disabled = !activeDay || !appState.currentUser?.isAdmin || activeDay.isArchived;
   dayThemeInput.placeholder = appState.currentUser?.isAdmin
     ? "Например: вархаммер, киллтим, террейн"
     : "Тематика пока не задана";

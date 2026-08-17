@@ -4,13 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Вечер покраса у Карповых</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Трекер покрасов</p>
           <h1>Вечер покраса у Карповых</h1>
         </div>
         <div class="topbar-right">
@@ -29,7 +28,11 @@
 
       <div class="day-switcher">
         <div class="tabs" id="dayTabs" role="tablist" aria-label="Вечера покраса"></div>
-        <button class="primary-button create-day-button" id="openCreateDayButton" type="button">Создать</button>
+        <div class="day-actions">
+          <a class="ghost-button mode-link" id="activeViewButton" href="/">Активные</a>
+          <a class="ghost-button mode-link" id="archiveViewButton" href="/archive">Архив</a>
+          <button class="primary-button create-day-button" id="openCreateDayButton" type="button">Создать</button>
+        </div>
       </div>
 
       <section class="workspace" aria-label="Бронирование мест">
@@ -45,7 +48,10 @@
               </form>
               <p class="current-day-date" id="currentDayDate"></p>
             </div>
-            <button class="ghost-button" id="clearAllButton" type="button">Очистить</button>
+            <div class="section-actions">
+              <button class="ghost-button" id="archiveDayButton" type="button">В архив</button>
+              <button class="ghost-button" id="clearAllButton" type="button">Очистить</button>
+            </div>
           </div>
           <div class="cards-grid" id="cardsGrid"></div>
         </div>
@@ -139,6 +145,41 @@
       </div>
     </dialog>
 
+    <dialog class="booking-dialog user-profile-dialog" id="userProfileDialog">
+      <div class="booking-form">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Профиль пользователя</p>
+            <h2 id="userProfileName">Пользователь</h2>
+            <p class="auth-status" id="userProfileTelegram"></p>
+          </div>
+          <button class="icon-button" id="closeUserProfileButton" type="button" aria-label="Закрыть">×</button>
+        </div>
+
+        <dl class="profile-summary">
+          <div>
+            <dt>Роль</dt>
+            <dd id="userProfileRole">Пользователь</dd>
+          </div>
+        </dl>
+
+        <div class="temp-password-box" id="tempPasswordBox" hidden>
+          <label class="field">
+            <span>Временный пароль</span>
+            <input id="tempPasswordInput" type="text" readonly />
+          </label>
+          <button class="ghost-button" id="copyTempPasswordButton" type="button">Скопировать</button>
+        </div>
+
+        <p class="form-error auth-message" id="userProfileMessage" role="alert"></p>
+
+        <div class="dialog-actions">
+          <button class="ghost-button" id="grantProfileAdminButton" type="button">Сделать админом</button>
+          <button class="primary-button" id="resetUserPasswordButton" type="button">Сгенерить временный пароль</button>
+        </div>
+      </div>
+    </dialog>
+
     <dialog class="booking-dialog" id="bookingDialog">
       <form method="dialog" class="booking-form" id="bookingForm">
         <div class="dialog-head">
@@ -190,6 +231,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>

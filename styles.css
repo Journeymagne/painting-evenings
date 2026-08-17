@@ -270,6 +270,15 @@ h2 {
   overflow-x: auto;
 }
 
+.day-actions,
+.section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .day-tab {
   display: inline-flex;
   align-items: center;
@@ -280,12 +289,15 @@ h2 {
 .tab {
   appearance: none;
   min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   border: 0;
   border-bottom: 3px solid transparent;
   background: transparent;
   color: var(--muted);
   padding: 0 14px;
   font-weight: 800;
+  text-decoration: none;
   white-space: nowrap;
 }
 
@@ -326,6 +338,14 @@ h2 {
   border-color: var(--line);
   background: rgba(40, 35, 29, 0.86);
   color: var(--muted);
+}
+
+.tabs-empty {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .workspace {
@@ -430,16 +450,26 @@ h2 {
 }
 
 .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(40, 35, 29, 0.9);
   border-color: var(--line);
   color: var(--muted);
   padding: 0 12px;
   font-weight: 700;
+  text-decoration: none;
 }
 
 .ghost-button:hover,
 .ghost-button:focus-visible {
   border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.mode-link.is-active {
+  border-color: var(--accent);
+  background: rgba(46, 157, 142, 0.18);
   color: var(--accent-dark);
 }
 
@@ -613,7 +643,7 @@ th {
 
 .participants th:nth-child(2),
 .participants td:nth-child(2) {
-  width: 18%;
+  width: 19%;
 }
 
 .participants th:nth-child(3),
@@ -623,12 +653,13 @@ th {
 
 .participants th:nth-child(4),
 .participants td:nth-child(4) {
-  width: 32%;
+  width: 34%;
 }
 
 .participants th:nth-child(5),
 .participants td:nth-child(5) {
-  width: 23%;
+  width: 20%;
+  overflow-wrap: normal;
 }
 
 .participants td {
@@ -651,7 +682,7 @@ tbody tr.is-paid td {
   min-width: 0;
   color: var(--accent-dark);
   font-weight: 800;
-  white-space: nowrap;
+  line-height: 1.15;
 }
 
 .paid-check span {
@@ -699,8 +730,68 @@ tbody tr.is-paid td {
   width: min(780px, calc(100% - 28px));
 }
 
+.user-profile-dialog {
+  width: min(560px, calc(100% - 28px));
+}
+
 .users-table-wrap table {
-  min-width: 650px;
+  min-width: 760px;
+}
+
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-summary {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.profile-summary div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #211d18;
+  padding: 12px;
+}
+
+.profile-summary dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.profile-summary dd {
+  margin: 0;
+  font-weight: 850;
+}
+
+.temp-password-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid rgba(46, 157, 142, 0.42);
+  border-radius: 8px;
+  background: rgba(46, 157, 142, 0.1);
+  padding: 12px;
+}
+
+.temp-password-box[hidden] {
+  display: none;
+}
+
+.temp-password-box input {
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-weight: 850;
 }
 
 .booking-dialog::backdrop {
@@ -796,6 +887,14 @@ tbody tr.is-paid td {
   font-weight: 750;
 }
 
+.field-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
 .field input,
 .field select {
   min-height: 46px;
@@ -871,6 +970,134 @@ tbody tr.is-paid td {
   }
 }
 
+@media (max-width: 900px) {
+  .participants .table-wrap {
+    border: 0;
+    background: transparent;
+  }
+
+  .participants table,
+  .participants tbody,
+  .participants tr,
+  .participants td {
+    display: block;
+    width: 100%;
+  }
+
+  .participants th:nth-child(1),
+  .participants td:nth-child(1),
+  .participants th:nth-child(2),
+  .participants td:nth-child(2),
+  .participants th:nth-child(3),
+  .participants td:nth-child(3),
+  .participants th:nth-child(4),
+  .participants td:nth-child(4),
+  .participants th:nth-child(5),
+  .participants td:nth-child(5) {
+    width: auto;
+  }
+
+  .participants thead {
+    display: none;
+  }
+
+  .participants tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .participants tbody tr {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(33, 30, 25, 0.92);
+    overflow: hidden;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  }
+
+  .participants tbody tr.is-paid {
+    border-color: rgba(63, 180, 109, 0.5);
+    background: rgba(22, 58, 40, 0.76);
+  }
+
+  .participants tbody tr.is-paid td {
+    background: transparent;
+  }
+
+  .participants td {
+    display: grid;
+    grid-template-columns: minmax(78px, 0.34fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    margin: 0;
+    padding: 10px 12px;
+    overflow-wrap: break-word;
+  }
+
+  .participants td:last-child {
+    border-bottom: 0;
+  }
+
+  .participants td:first-child {
+    margin: 0;
+    padding: 14px 12px 10px;
+    font-size: 17px;
+    font-weight: 850;
+  }
+
+  .participants td:first-child::before {
+    margin-bottom: 3px;
+  }
+
+  .participants td:nth-child(5) {
+    grid-template-columns: 1fr;
+    margin: 0;
+    padding: 12px;
+    border-top: 1px solid var(--line);
+    background: rgba(23, 21, 17, 0.5);
+  }
+
+  .participants td:nth-child(5)::before {
+    display: none;
+  }
+
+  .participants td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  .participants .paid-check {
+    width: 100%;
+    min-height: 46px;
+    justify-content: space-between;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(40, 35, 29, 0.82);
+    padding: 0 12px;
+    font-size: 15px;
+  }
+
+  .participants .paid-check input {
+    order: 2;
+    width: 24px;
+    height: 24px;
+  }
+
+  .participants .paid-check.is-readonly {
+    justify-content: center;
+    border-color: transparent;
+    background: transparent;
+    padding: 0;
+  }
+
+  .participants .paid-check.is-readonly input {
+    display: none;
+  }
+}
+
 @media (max-width: 680px) {
   .app-shell {
     width: min(100% - 20px, 1440px);
@@ -919,6 +1146,18 @@ tbody tr.is-paid td {
   }
 
   .tabs {
+    width: 100%;
+  }
+
+  .day-actions,
+  .section-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+
+  .day-actions .ghost-button,
+  .section-actions .ghost-button {
     width: 100%;
   }
 
@@ -1081,6 +1320,11 @@ tbody tr.is-paid td {
   }
 
   .slot-user-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-summary div,
+  .temp-password-box {
     grid-template-columns: 1fr;
   }
 
