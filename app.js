@@ -35,6 +35,9 @@ const places = [
 
 const totalCapacity = places.reduce((sum, place) => sum + place.capacity, 0);
 let pendingBooking = null;
+let seatDrag = null;
+let seatMoveBusy = false;
+let suppressSeatClickUntil = 0;
 
 const accountStatus = document.querySelector("#accountStatus");
 const openAuthButton = document.querySelector("#openAuthButton");
@@ -779,10 +782,14 @@ async function toggleActiveDayArchive() {
 }
 
 function renderSeatingPlan() {
+  cancelSeatDrag();
   const activeDay = getActiveDay();
   document.querySelector("#planHint").textContent = activeDay?.isArchived
     ? "Рассадка прошедшего вечера · только просмотр."
-    : activeDay ? "Нажмите на место, чтобы записаться." : "Создайте вечер, чтобы открыть запись.";
+    : activeDay ? appState.currentUser
+      ? "Нажмите на место для записи. Перетащите участника между креслами покрасочного стола; занятые места обменяются. С клавиатуры: пробел, Tab, Enter."
+      : "Нажмите на место, чтобы записаться."
+    : "Создайте вечер, чтобы открыть запись.";
   cardsGrid.innerHTML = `
     <section class="table-zone common-zone" aria-label="Общий стол, 8 мест">
       <div class="table-surface common-surface"><span class="table-mark">01</span><strong>Общий стол</strong><span>Покрас миниатюр</span><small>8 мест</small><span class="table-decoration" aria-hidden="true">✳</span></div>
@@ -827,9 +834,131 @@ function appendSeat(zoneSelector, placeId, slotIndex, x, y, label) {
   seat.setAttribute("aria-label", `${tableName}, место ${label}: ${status}`);
   seat.title = `${tableName} · ${status}`;
   seat.innerHTML = `<span class="seat-circle"><span>${escapeHtml(label)}</span>${player ? '<i aria-hidden="true">✓</i>' : ""}</span><span class="seat-name">${escapeHtml(player?.name || "Свободно")}</span>${player?.time ? `<span class="seat-time">${escapeHtml(player.time)}</span>` : ""}`;
-  seat.addEventListener("click", () => openBooking(placeId, slotIndex));
+  seat.classList.toggle("is-movable", canMovePaintSeat(placeId));
+  seat.addEventListener("click", () => {
+    if (seatMoveBusy || Date.now() < suppressSeatClickUntil) return;
+    if (seatDrag?.keyboard) {
+      finishSeatDrag(placeId);
+      return;
+    }
+    openBooking(placeId, slotIndex);
+  });
+  seat.addEventListener("pointerdown", event => startSeatDrag(event, seat, placeId));
+  seat.addEventListener("keydown", event => {
+    if (event.key !== " " && event.key !== "Enter") return;
+    if (seatDrag?.keyboard) {
+      event.preventDefault();
+      finishSeatDrag(placeId);
+    } else if (event.key === " " && canMovePaintSeat(placeId) && !seatMoveBusy) {
+      event.preventDefault();
+      beginSeatDrag(seat, placeId, { keyboard: true, active: true });
+      document.querySelector("#seatMoveStatus").textContent = "Выберите кресло клавишей Tab и нажмите Enter. Escape — отмена.";
+    }
+  });
   cardsGrid.querySelector(zoneSelector).append(seat);
 }
+
+function canMovePaintSeat(placeId) {
+  const day = getActiveDay();
+  const player = getBookingSlots(placeId)[0];
+  return /^paint-[1-8]$/.test(placeId) && Boolean(day && !day.isArchived && appState.currentUser && player &&
+    (appState.currentUser.isAdmin || player.canDelete));
+}
+
+function canDropPaintSeat(placeId) {
+  if (!seatDrag || seatDrag.dayId !== getActiveDay()?.id || placeId === seatDrag.fromPlaceId || !/^paint-[1-8]$/.test(placeId)) return false;
+  return !getBookingSlots(placeId)[0] || canMovePaintSeat(placeId);
+}
+
+function beginSeatDrag(seat, placeId, details) {
+  cancelSeatDrag();
+  seatDrag = { seat, fromPlaceId: placeId, dayId: getActiveDay().id, bookingId: getBookingSlots(placeId)[0].bookingId, ...details };
+  if (seatDrag.active) highlightSeatTargets();
+}
+
+function highlightSeatTargets() {
+  seatDrag.seat.classList.add("is-dragging");
+  cardsGrid.querySelectorAll(".common-zone .seat").forEach(seat => seat.classList.toggle("is-drop-target", canDropPaintSeat(seat.dataset.placeId)));
+}
+
+function startSeatDrag(event, seat, placeId) {
+  if (event.button !== 0 || !event.isPrimary || seatMoveBusy || !canMovePaintSeat(placeId) || seatDrag?.keyboard) return;
+  beginSeatDrag(seat, placeId, { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false });
+  seat.setPointerCapture(event.pointerId);
+}
+
+function cancelSeatDrag() {
+  if (seatDrag?.seat.hasPointerCapture(seatDrag.pointerId)) seatDrag.seat.releasePointerCapture(seatDrag.pointerId);
+  seatDrag?.ghost?.remove();
+  seatDrag = null;
+  cardsGrid.querySelectorAll(".is-dragging, .is-drop-target, .is-drop-over").forEach(seat => seat.classList.remove("is-dragging", "is-drop-target", "is-drop-over"));
+}
+
+async function finishSeatDrag(toPlaceId) {
+  if (!canDropPaintSeat(toPlaceId)) {
+    cancelSeatDrag();
+    document.querySelector("#seatMoveStatus").textContent = "Перенос отменён.";
+    return;
+  }
+  const { dayId, fromPlaceId, bookingId } = seatDrag;
+  const targetBookingId = getBookingSlots(toPlaceId)[0]?.bookingId || null;
+  cancelSeatDrag();
+  seatMoveBusy = true;
+  cardsGrid.setAttribute("aria-busy", "true");
+  const status = document.querySelector("#seatMoveStatus");
+  status.textContent = "Сохраняем рассадку…";
+  try {
+    const result = await apiFetch(`/api/days/${encodeURIComponent(dayId)}/bookings/move`, {
+      method: "POST", body: { fromPlaceId, toPlaceId, bookingId, targetBookingId },
+    });
+    await loadApp(dayId);
+    status.textContent = result.swapped ? "Участники поменялись местами." : "Участник перемещён.";
+    cardsGrid.querySelector(`.seat[data-place-id="${toPlaceId}"]`)?.focus();
+  } catch (error) {
+    await loadApp(dayId);
+    status.textContent = error.message;
+  } finally {
+    seatMoveBusy = false;
+    cardsGrid.removeAttribute("aria-busy");
+  }
+}
+
+document.addEventListener("pointermove", event => {
+  if (!seatDrag || seatDrag.keyboard || seatDrag.pointerId !== event.pointerId) return;
+  if (!seatDrag.active) {
+    if (Math.hypot(event.clientX - seatDrag.startX, event.clientY - seatDrag.startY) < 8) return;
+    seatDrag.active = true;
+    highlightSeatTargets();
+    const ghost = document.createElement("div");
+    ghost.className = "seat-drag-ghost";
+    ghost.textContent = getBookingSlots(seatDrag.fromPlaceId)[0].name;
+    ghost.setAttribute("aria-hidden", "true");
+    document.body.append(ghost);
+    seatDrag.ghost = ghost;
+  }
+  seatDrag.ghost.style.left = `${event.clientX + 14}px`;
+  seatDrag.ghost.style.top = `${event.clientY + 14}px`;
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".seat");
+  cardsGrid.querySelectorAll(".is-drop-over").forEach(seat => seat.classList.remove("is-drop-over"));
+  if (canDropPaintSeat(target?.dataset.placeId)) target.classList.add("is-drop-over");
+});
+
+document.addEventListener("pointerup", event => {
+  if (!seatDrag || seatDrag.keyboard || seatDrag.pointerId !== event.pointerId) return;
+  if (!seatDrag.active) { cancelSeatDrag(); return; }
+  suppressSeatClickUntil = Date.now() + 400;
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".seat");
+  finishSeatDrag(target?.dataset.placeId);
+});
+document.addEventListener("pointercancel", cancelSeatDrag);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && seatDrag) {
+    suppressSeatClickUntil = Date.now() + 400;
+    cancelSeatDrag();
+    document.querySelector("#seatMoveStatus").textContent = "Перенос отменён.";
+  }
+});
+window.addEventListener("blur", cancelSeatDrag);
 
 function showArchiveIndex(event) {
   if (event && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;

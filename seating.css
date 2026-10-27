@@ -39,6 +39,14 @@
 .seat:focus-visible .seat-circle { outline: 3px solid var(--map-ink); outline-offset: 4px; }
 .seat:disabled { cursor: default; opacity: 1; }
 .player-slot.is-selected { border-color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
+.seat.is-movable { cursor: grab; touch-action: none; user-select: none; }
+.seat.is-dragging { opacity: .4; cursor: grabbing; }
+.seat.is-drop-target .seat-circle { outline: 2px dashed var(--seat-line); outline-offset: 4px; }
+.seat.is-drop-over .seat-circle { outline: 3px solid var(--occupied-line); outline-offset: 5px; transform: scale(1.12); }
+.room-map[aria-busy="true"] { pointer-events: none; opacity: .65; }
+.seat-drag-ghost { position: fixed; z-index: 100; pointer-events: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 14px; border: 1px solid #66b38b; border-radius: 12px; background: #214637; color: #f0e7d8; box-shadow: 0 6px 24px #0007; }
+.seat-move-status { margin: 8px 0 0; color: var(--accent-dark); font-size: 12px; }
+.seat-move-status:empty { display: none; }
 
 .archive-index { max-width: 980px; margin: 32px auto; }
 .archive-index h2 { font-size: 30px; }

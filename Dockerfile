@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY server.js app.js index.html styles.css seating.css ./
+COPY server.js move-booking.js app.js index.html styles.css seating.css ./
 
 EXPOSE 3000
 

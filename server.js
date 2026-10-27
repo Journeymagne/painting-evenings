@@ -3,6 +3,7 @@ const fs = require("fs/promises");
 const http = require("http");
 const path = require("path");
 const { Pool } = require("pg");
+const { movePaintBooking } = require("./move-booking");
 
 const PORT = Number(process.env.PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL || "postgres://paint:paint@localhost:5432/paint_tracker";
@@ -916,6 +917,13 @@ async function handleApi(req, res, url) {
     if (parts[3] === "bookings") {
       const currentUser = await requireUser(req, res);
       if (!currentUser) {
+        return;
+      }
+
+      if (req.method === "POST" && parts.length === 5 && parts[4] === "move") {
+        const result = await movePaintBooking(pool, dayId, currentUser, await readBody(req));
+        if (result.error) sendError(res, result.status, result.error);
+        else sendJson(res, result.status, { ok: true, swapped: result.swapped });
         return;
       }
 
