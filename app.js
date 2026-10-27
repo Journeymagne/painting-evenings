@@ -34,6 +34,7 @@ const places = [
 ];
 
 const totalCapacity = places.reduce((sum, place) => sum + place.capacity, 0);
+let pendingBooking = null;
 
 const accountStatus = document.querySelector("#accountStatus");
 const openAuthButton = document.querySelector("#openAuthButton");
@@ -47,6 +48,10 @@ const dayThemeInput = document.querySelector("#dayThemeInput");
 const saveDayThemeButton = document.querySelector("#saveDayThemeButton");
 const currentDayDate = document.querySelector("#currentDayDate");
 const cardsGrid = document.querySelector("#cardsGrid");
+const archiveIndex = document.querySelector("#archiveIndex");
+const archiveList = document.querySelector("#archiveList");
+const archiveBack = document.querySelector("#archiveBack");
+const dayWorkspace = document.querySelector("#dayWorkspace");
 const participantsBody = document.querySelector("#participantsBody");
 const tableWrap = document.querySelector(".table-wrap");
 const reservedCount = document.querySelector("#reservedCount");
@@ -152,9 +157,9 @@ function getDayUrl(day, viewMode = day?.isArchived ? "archive" : "active") {
 
 function updateUrlForActiveDay(replace = false) {
   const activeDay = getActiveDay();
-  const url = getDayUrl(activeDay, appState.viewMode);
+  const url = getDayUrl(activeDay, appState.viewMode) + window.location.search;
 
-  if (window.location.pathname === url) {
+  if (window.location.pathname + window.location.search === url) {
     return;
   }
 
@@ -204,10 +209,10 @@ async function loadApp(preferredDayId = appState.activeDayId) {
     appState.viewMode = route.viewMode;
 
     const visibleDays = getVisibleDays();
-    const requestedDayId = route.dayId || preferredDayId;
+    const requestedDayId = appState.viewMode === "archive" ? route.dayId : route.dayId || preferredDayId;
     appState.activeDayId = visibleDays.some((day) => day.id === requestedDayId)
       ? requestedDayId
-      : visibleDays[0]?.id || null;
+      : appState.viewMode === "archive" ? null : visibleDays[0]?.id || null;
     updateUrlForActiveDay(true);
     render();
   } catch (error) {
@@ -225,7 +230,7 @@ function getPlace(placeId) {
 
 function getActiveDay() {
   const visibleDays = getVisibleDays();
-  return visibleDays.find((day) => day.id === appState.activeDayId) || visibleDays[0] || null;
+  return visibleDays.find((day) => day.id === appState.activeDayId) || null;
 }
 
 function getVisibleDays() {
@@ -312,7 +317,7 @@ function renderAuth() {
   openAuthButton.textContent = user ? "Профиль" : "Войти";
   manageUsersButton.hidden = !user?.isAdmin;
   logoutButton.hidden = !user;
-  closeAuthButton.hidden = !user;
+  closeAuthButton.hidden = false;
   openCreateDayButton.hidden = appState.viewMode === "archive";
   openCreateDayButton.disabled = !user?.isAdmin || appState.viewMode === "archive";
   openCreateDayButton.title = user?.isAdmin ? "Создать вечер покраса" : "Создавать вечера может только админ";
@@ -481,8 +486,18 @@ function openAuthDialog() {
 }
 
 function closeAuthDialog() {
+  pendingBooking = null;
   authForm.reset();
   authDialog.close();
+}
+
+async function finishAuthentication() {
+  const booking = pendingBooking;
+  closeAuthDialog();
+  await loadApp(appState.activeDayId);
+  if (booking && getActiveDay()?.id === booking.dayId && !getActiveDay().isArchived) {
+    openBooking(booking.placeId, booking.slotIndex);
+  }
 }
 
 async function registerUserFromForm() {
@@ -501,8 +516,7 @@ async function registerUserFromForm() {
     setToken(data.token);
     appState.currentUser = data.user;
     setAuthMessage("Профиль создан.", "success");
-    closeAuthDialog();
-    await loadApp(appState.activeDayId);
+    await finishAuthentication();
   } catch (error) {
     setAuthMessage(error.message);
   }
@@ -524,8 +538,7 @@ async function loginUserFromForm() {
     setToken(data.token);
     appState.currentUser = data.user;
     setAuthMessage("Вы вошли.", "success");
-    closeAuthDialog();
-    await loadApp(appState.activeDayId);
+    await finishAuthentication();
   } catch (error) {
     setAuthMessage(error.message);
   }
@@ -627,6 +640,8 @@ function renderDayTabs() {
 
   activeViewButton.classList.toggle("is-active", appState.viewMode === "active");
   archiveViewButton.classList.toggle("is-active", appState.viewMode === "archive");
+  dayTabs.hidden = appState.viewMode === "archive";
+  if (appState.viewMode === "archive") return;
 
   visibleDays.forEach((day) => {
     const isActive = day.id === appState.activeDayId;
@@ -763,73 +778,97 @@ async function toggleActiveDayArchive() {
   }
 }
 
-function renderCards() {
-  cardsGrid.innerHTML = "";
+function renderSeatingPlan() {
   const activeDay = getActiveDay();
-  const isViewOnly = !appState.currentUser || !activeDay || Boolean(activeDay.isArchived);
+  document.querySelector("#planHint").textContent = activeDay?.isArchived
+    ? "Рассадка прошедшего вечера · только просмотр."
+    : activeDay ? "Нажмите на место, чтобы записаться." : "Создайте вечер, чтобы открыть запись.";
+  cardsGrid.innerHTML = `
+    <section class="table-zone common-zone" aria-label="Общий стол, 8 мест">
+      <div class="table-surface common-surface"><span class="table-mark">01</span><strong>Общий стол</strong><span>Покрас миниатюр</span><small>8 мест</small><span class="table-decoration" aria-hidden="true">✳</span></div>
+    </section>
+    <section class="table-zone tea-zone" aria-label="Чайный стол, 2 места">
+      <div class="table-surface tea-surface"><span class="table-mark">02</span><strong>Чайный стол</strong><span>Киллтим · Бладболл · Андер</span></div>
+    </section>
+    <section class="table-zone big-zone" aria-label="Большой стол, две половины по 2 места">
+      <div class="table-surface big-surface"><div><span class="table-mark">03 / A</span><strong>Большой стол</strong><span>Первая половина</span></div><div><span class="table-mark">03 / Б</span><strong>Большой стол</strong><span>Вторая половина</span></div></div>
+    </section>
+    <section class="table-zone kitchen-zone" aria-label="Кухонный стол, 2 места">
+      <div class="table-surface kitchen-surface"><span class="table-mark">04</span><strong>Кухонный стол</strong><span>Бладболл · Андер</span></div>
+    </section>`;
 
-  places.forEach((place) => {
-    const players = getBookingPlayers(place.id);
-    const playerCount = players.length;
-    const isFull = playerCount >= place.capacity;
-    const isPartial = playerCount > 0 && !isFull;
-    const stateClass = isFull ? " is-booked" : isPartial ? " is-partial" : "";
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = `place-card${stateClass}${isViewOnly ? " is-view-only" : ""}`;
-    card.setAttribute("aria-label", `${placeLabel(place)} ${getCardStatusText(place, playerCount)}`);
-    card.setAttribute("aria-disabled", String(isViewOnly));
-    card.disabled = isViewOnly;
-    card.title = !appState.currentUser
-      ? "Войдите, чтобы добавлять или менять записи"
-      : !activeDay
-        ? "Сначала выберите или создайте вечер покраса"
-      : activeDay?.isArchived
-        ? "Архивный вечер доступен только для просмотра"
-        : "";
-    card.dataset.placeId = place.id;
+  const paintingPositions = [[50, 9], [12, 29], [88, 29], [12, 51], [88, 51], [12, 73], [88, 73], [50, 93]];
+  paintingPositions.forEach(([x, y], index) => appendSeat(".common-zone", `paint-${index + 1}`, 0, x, y, String(index + 1)));
+  appendSeat(".tea-zone", "tea-table", 0, 50, 12, "1");
+  appendSeat(".tea-zone", "tea-table", 1, 50, 91, "2");
+  appendSeat(".big-zone", "big-table-1", 0, 11, 28, "А1");
+  appendSeat(".big-zone", "big-table-1", 1, 89, 28, "А2");
+  appendSeat(".big-zone", "big-table-2", 0, 11, 75, "Б1");
+  appendSeat(".big-zone", "big-table-2", 1, 89, 75, "Б2");
+  appendSeat(".kitchen-zone", "kitchen-table", 0, 50, 12, "1");
+  appendSeat(".kitchen-zone", "kitchen-table", 1, 50, 92, "2");
+}
 
-    card.innerHTML = `
-      <span class="place-main">
-        <span class="place-title">${escapeHtml(place.title)}</span>
-        <span class="place-detail">${escapeHtml(place.detail)}</span>
-      </span>
-      <span class="place-footer">
-        <span>${escapeHtml(getCardSummary(place, players))}</span>
-        <span class="status-pill">${escapeHtml(getCardStatusText(place, playerCount))}</span>
-      </span>
-    `;
+function appendSeat(zoneSelector, placeId, slotIndex, x, y, label) {
+  const player = getBookingSlots(placeId)[slotIndex];
+  const activeDay = getActiveDay();
+  const place = getPlace(placeId);
+  const isMine = player && appState.currentUser && player.userId === appState.currentUser.id;
+  const status = player ? `${player.name}${player.time ? ` · ${player.time}` : ""}` : "Свободно";
+  const seat = document.createElement("button");
+  seat.type = "button";
+  seat.className = `seat${player ? " is-booked" : ""}${isMine ? " is-mine" : ""}`;
+  seat.style.left = `${x}%`;
+  seat.style.top = `${y}%`;
+  seat.dataset.placeId = placeId;
+  seat.dataset.slotIndex = slotIndex;
+  seat.disabled = !activeDay || Boolean(activeDay.isArchived);
+  const tableName = placeId.startsWith("big-table") ? `${place.title}, половина ${placeId.endsWith("1") ? "А" : "Б"}` : placeLabel(place);
+  seat.setAttribute("aria-label", `${tableName}, место ${label}: ${status}`);
+  seat.title = `${tableName} · ${status}`;
+  seat.innerHTML = `<span class="seat-circle"><span>${escapeHtml(label)}</span>${player ? '<i aria-hidden="true">✓</i>' : ""}</span><span class="seat-name">${escapeHtml(player?.name || "Свободно")}</span>${player?.time ? `<span class="seat-time">${escapeHtml(player.time)}</span>` : ""}`;
+  seat.addEventListener("click", () => openBooking(placeId, slotIndex));
+  cardsGrid.querySelector(zoneSelector).append(seat);
+}
 
-    if (!isViewOnly) {
-      card.addEventListener("click", () => openBooking(place.id));
-    }
-    cardsGrid.append(card);
+function showArchiveIndex(event) {
+  if (event && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
+  event?.preventDefault();
+  appState.viewMode = "archive";
+  appState.activeDayId = null;
+  updateUrlForActiveDay();
+  render();
+}
+
+function renderArchive() {
+  const isArchive = appState.viewMode === "archive";
+  const isIndex = isArchive && !getActiveDay();
+  archiveIndex.hidden = !isIndex;
+  archiveBack.hidden = !isArchive || isIndex;
+  dayWorkspace.hidden = isIndex;
+  document.querySelector(".stats").hidden = !getActiveDay();
+  archiveList.innerHTML = "";
+  if (!isIndex) return;
+  const days = [...getVisibleDays()].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  days.forEach((day) => {
+    const count = Object.values(day.bookings || {}).reduce((sum, slots) => sum + (Array.isArray(slots) ? slots.filter(Boolean).length : 0), 0);
+    const item = document.createElement("li");
+    const link = document.createElement("a");
+    link.className = "archive-day-link";
+    link.href = getDayUrl(day) + window.location.search;
+    link.innerHTML = `<time datetime="${escapeAttribute(day.date)}">${escapeHtml(formatDate(day.date))}</time><span class="archive-day-theme">${escapeHtml(day.theme || "Вечер покраса")}</span><span class="archive-day-count">Участников: ${count}</span><span aria-hidden="true">↗</span>`;
+    link.addEventListener("click", (event) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      appState.activeDayId = day.id;
+      updateUrlForActiveDay();
+      render();
+      archiveBack.focus();
+    });
+    item.append(link);
+    archiveList.append(item);
   });
-}
-
-function getCardSummary(place, players) {
-  if (!players.length) {
-    return "Свободно";
-  }
-
-  if (place.capacity === 1) {
-    return players[0].time ? `${players[0].name}, ${players[0].time}` : `${players[0].name}, время не указано`;
-  }
-
-  const names = players.map((player) => player.name).join(", ");
-  return `${players.length} из ${place.capacity}: ${names}`;
-}
-
-function getCardStatusText(place, playerCount) {
-  if (!playerCount) {
-    return "Открыто";
-  }
-
-  if (playerCount < place.capacity) {
-    return `${playerCount}/${place.capacity}`;
-  }
-
-  return "Занято";
+  if (!days.length) archiveList.innerHTML = '<li class="empty-state">Архив пока пуст. Здесь появятся завершённые вечера.</li>';
 }
 
 function renderParticipants() {
@@ -878,25 +917,26 @@ function renderParticipants() {
   freeCount.textContent = String(totalCapacity - rows.length);
 }
 
-function openBooking(placeId) {
-  if (!appState.currentUser) {
-    openAuthDialog();
-    return;
-  }
-
+function openBooking(placeId, selectedSlotIndex = 0) {
   const activeDay = getActiveDay();
-  if (!activeDay) {
-    window.alert("Сначала создайте вечер покраса.");
+  if (!activeDay || activeDay.isArchived) return;
+  const place = getPlace(placeId);
+  if (!place || selectedSlotIndex < 0 || selectedSlotIndex >= place.capacity) return;
+  if (!appState.currentUser) {
+    pendingBooking = { dayId: activeDay.id, placeId, slotIndex: selectedSlotIndex };
+    openAuthDialog();
+    setAuthMode("register");
+    authStatus.textContent = "Зарегистрируйтесь или войдите, чтобы записаться на выбранное место.";
     return;
   }
 
-  const place = getPlace(placeId);
   const slots = getBookingSlots(placeId);
   const players = getBookingPlayers(placeId);
   const canRelease = Boolean(players.length && (appState.currentUser?.isAdmin || players.some((player) => player.canDelete)));
 
   placeIdInput.value = placeId;
-  dialogTitle.textContent = placeLabel(place);
+  const halfLabel = placeId.startsWith("big-table") ? ` · половина ${placeId.endsWith("1") ? "А" : "Б"}` : "";
+  dialogTitle.textContent = `${place.title}${halfLabel} · место ${place.capacity === 1 ? place.detail.replace("Место ", "") : selectedSlotIndex + 1}`;
   bookingSlots.innerHTML = "";
   releaseButton.classList.toggle("is-hidden", !canRelease);
   releaseButton.textContent = appState.currentUser?.isAdmin ? "Освободить" : "Удалить мои записи";
@@ -904,11 +944,13 @@ function openBooking(placeId) {
 
   Array.from({ length: place.capacity }, (_, slotIndex) => {
     const player = slots[slotIndex] || {};
-    bookingSlots.append(createPlayerSlot(place, player, slotIndex));
+    const fieldset = createPlayerSlot(place, player, slotIndex);
+    fieldset.classList.toggle("is-selected", slotIndex === selectedSlotIndex);
+    bookingSlots.append(fieldset);
   });
 
   bookingDialog.showModal();
-  bookingSlots.querySelector("input:not([type='hidden'])")?.focus();
+  bookingSlots.querySelector(`.slot-name[data-slot-index="${selectedSlotIndex}"]:not(:disabled)`)?.focus();
 }
 
 function createPlayerSlot(place, player, slotIndex) {
@@ -1067,7 +1109,7 @@ function applyUserToSlot(slotIndex, user) {
 
 function collectPlayers(place) {
   const currentPlayers = getBookingSlots(place.id);
-  const players = [];
+  const players = Array(place.capacity).fill(null);
 
   for (let slotIndex = 0; slotIndex < place.capacity; slotIndex += 1) {
     const userId = bookingSlots.querySelector(`.slot-user-id[data-slot-index="${slotIndex}"]`)?.value || null;
@@ -1098,16 +1140,16 @@ function collectPlayers(place) {
       };
     }
 
-    players.push({
+    players[slotIndex] = {
       userId,
       name,
       telegram,
       time,
       paid: Boolean(currentPlayers[slotIndex]?.paid),
-    });
+    };
   }
 
-  if (!players.length) {
+  if (!players.some(Boolean)) {
     return {
       error: place.capacity === 1 ? "Заполни имя и телеграм." : "Добавь хотя бы одного игрока.",
     };
@@ -1115,7 +1157,7 @@ function collectPlayers(place) {
 
   return {
     players,
-    hasMissingTime: players.some((player) => !player.time),
+    hasMissingTime: players.some((player) => player && !player.time),
   };
 }
 
@@ -1214,13 +1256,8 @@ activeViewButton.addEventListener("click", (event) => {
   render();
 });
 
-archiveViewButton.addEventListener("click", (event) => {
-  event.preventDefault();
-  appState.viewMode = "archive";
-  appState.activeDayId = getVisibleDays()[0]?.id || null;
-  updateUrlForActiveDay();
-  render();
-});
+archiveViewButton.addEventListener("click", showArchiveIndex);
+archiveBack.addEventListener("click", showArchiveIndex);
 
 dayThemeForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1394,6 +1431,7 @@ authDialog.addEventListener("click", (event) => {
 });
 
 authDialog.addEventListener("cancel", () => {
+  pendingBooking = null;
   setAuthMessage("");
 });
 
@@ -1414,7 +1452,7 @@ window.addEventListener("popstate", () => {
   appState.viewMode = route.viewMode;
   appState.activeDayId = getVisibleDays().some((day) => day.id === route.dayId)
     ? route.dayId
-    : getVisibleDays()[0]?.id || null;
+    : route.viewMode === "archive" ? null : getVisibleDays()[0]?.id || null;
   render();
 });
 
@@ -1433,7 +1471,8 @@ function render() {
     : "Тематика пока не задана";
   renderAuth();
   renderDayTabs();
-  renderCards();
+  renderArchive();
+  renderSeatingPlan();
   renderParticipants();
 }
 

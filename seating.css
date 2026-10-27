@@ -1,0 +1,74 @@
+/* Floor plan: each chair maps to an existing booking slot. */
+.seating-plan { --map-bg: #1b1915; --map-ink: #f0e7d8; --map-muted: #b6ab99; --table-bg: #302b22; --table-border: #74614a; --seat-bg: #25251e; --seat-line: #d6ae78; --seat-ink: #efc892; --occupied-bg: #214637; --occupied-line: #66b38b; --occupied-ink: #c7f2d6; padding: 24px; border: 1px solid #454034; border-radius: 16px; background: var(--map-bg); color: var(--map-ink); }
+.plan-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.plan-heading .eyebrow { color: var(--map-muted); font-size: 10px; letter-spacing: 1.8px; font-weight: 600; }
+.plan-heading h2 { font-size: 24px; font-weight: 650; letter-spacing: -.5px; }
+.plan-capacity { color: var(--map-muted); font-size: 12px; white-space: nowrap; }
+.seat-legend { display: flex; gap: 18px; margin-top: 18px; font-size: 12px; color: var(--map-muted); }
+.seat-legend > span { display: inline-flex; align-items: center; gap: 7px; }
+.seat-legend i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--seat-line); background: var(--seat-bg); }
+.seat-legend .legend-booked { border-color: var(--occupied-line); background: var(--occupied-bg); }
+.plan-hint { margin: 10px 0 6px; color: var(--map-muted); font-size: 12px; }
+.room-map { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 235px 290px 218px; gap: 14px 26px; margin-top: 14px; }
+.table-zone { position: relative; min-width: 0; }
+.common-zone { grid-row: span 2; }
+.kitchen-zone { grid-column: 1 / -1; width: 70%; max-width: 420px; justify-self: center; }
+.table-surface { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--table-border); border-radius: 10px; background: var(--table-bg); text-align: center; padding: 12px; box-shadow: inset 0 0 0 5px var(--map-bg), 0 10px 18px #00000018; }
+.table-surface strong { font-size: 16px; font-weight: 650; line-height: 1.25; }
+.table-surface > span:not(.table-mark):not(.table-decoration), .big-surface > div > span:not(.table-mark) { color: var(--map-muted); font-size: 10px; line-height: 1.45; }
+.table-surface small { color: var(--map-muted); font-size: 11px; }
+.table-mark { color: var(--map-muted); font-size: 10px; letter-spacing: 2px; font-weight: 500; }
+.table-decoration { margin-top: 28px; font-size: 34px; color: var(--seat-line); opacity: .5; }
+.common-surface { left: 28%; top: 18%; width: 44%; height: 65%; }
+.tea-surface { left: 19%; top: 30%; width: 62%; height: 43%; }
+.big-surface { left: 26%; top: 8%; width: 48%; height: 86%; padding: 0; gap: 0; }
+.big-surface > div { display: flex; flex: 1; width: 100%; flex-direction: column; gap: 6px; align-items: center; justify-content: center; padding: 8px; }
+.big-surface > div + div { border-top: 2px dashed var(--table-border); }
+.big-surface strong { font-size: 14px; }
+.kitchen-surface { left: 32.5%; top: 31%; width: 35%; height: 43%; border-radius: 26px; padding: 8px; gap: 4px; }
+.seat { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; width: 24%; min-width: 44px; max-width: 92px; gap: 4px; border: 0; padding: 0; background: transparent; color: var(--map-ink); text-align: center; overflow: visible; }
+.seat-circle { position: relative; display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1.5px solid var(--seat-line); border-radius: 50%; background: var(--seat-bg); color: var(--seat-ink); font-size: 13px; font-weight: 650; transition: transform .16s, box-shadow .16s; }
+.seat-circle i { position: absolute; right: -3px; bottom: -2px; display: grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: var(--occupied-line); color: var(--map-bg); font-size: 10px; font-style: normal; }
+.seat-name { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--map-muted); font-size: 10px; line-height: 1.3; }
+.seat-time { font-size: 9px; color: var(--map-muted); line-height: 1.1; }
+.seat.is-booked .seat-circle { background: var(--occupied-bg); border-color: var(--occupied-line); color: var(--occupied-ink); }
+.seat.is-booked .seat-name { color: var(--map-ink); }
+.seat.is-mine .seat-circle { outline: 2px solid var(--occupied-line); outline-offset: 3px; }
+.seat:not(:disabled):hover .seat-circle { transform: translateY(-3px); box-shadow: 0 0 0 5px color-mix(in srgb, var(--seat-line) 18%, transparent); }
+.seat:focus-visible { outline: none; }
+.seat:focus-visible .seat-circle { outline: 3px solid var(--map-ink); outline-offset: 4px; }
+.seat:disabled { cursor: default; opacity: 1; }
+.player-slot.is-selected { border-color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
+
+.archive-index { max-width: 980px; margin: 32px auto; }
+.archive-index h2 { font-size: 30px; }
+.archive-description { color: var(--muted); font-size: 14px; margin: 12px 0 28px; }
+.archive-list { list-style: none; padding: 0; border-top: 1px solid var(--line); }
+.archive-day-link { display: grid; grid-template-columns: 130px minmax(0, 1fr) 130px 20px; align-items: center; gap: 20px; padding: 24px 16px; border-bottom: 1px solid var(--line); text-decoration: none; color: var(--ink); transition: background .15s; }
+.archive-day-link:hover, .archive-day-link:focus-visible { background: var(--surface-strong); outline: 2px solid var(--accent); outline-offset: -2px; }
+.archive-day-link time { color: var(--accent-dark); font-size: 16px; font-weight: 650; }
+.archive-day-theme { overflow-wrap: anywhere; }
+.archive-day-count { color: var(--muted); font-size: 13px; }
+.archive-back { display: inline-block; color: var(--accent-dark); text-decoration: none; margin: 2px 0 22px; font-size: 14px; }
+@media (max-width: 680px) {
+  .seating-plan { padding: 18px 12px; }
+  .plan-heading { align-items: flex-start; }
+  .plan-heading h2 { font-size: 23px; }
+  .plan-capacity { font-size: 10px; }
+  .room-map { grid-template-columns: 1fr; grid-template-rows: 480px 240px 310px 240px; gap: 16px; max-width: 400px; margin: 18px auto 0; }
+  .common-zone { grid-row: auto; }
+  .kitchen-zone { width: 100%; }
+  .seat-name { font-size: 11px; }
+  .seat-time { font-size: 10px; }
+  .table-surface strong { font-size: 17px; }
+  .archive-day-link { grid-template-columns: 1fr auto; gap: 10px; padding: 20px 8px; }
+  .archive-day-theme { grid-row: 2; }
+  .archive-day-count { grid-column: 2; grid-row: 2; font-size: 11px; }
+  .archive-day-link > span:last-child { grid-column: 2; grid-row: 1; text-align: right; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seat-circle { transition: none; }
+}
+
+.kitchen-surface strong { font-size: 14px; overflow-wrap: anywhere; }
+.kitchen-surface > span:not(.table-mark) { font-size: 9px; }

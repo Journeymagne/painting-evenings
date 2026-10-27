@@ -960,6 +960,7 @@ async function serveStatic(req, res, url) {
     ["/index.html", "index.html"],
     ["/app.js", "app.js"],
     ["/styles.css", "styles.css"],
+    ["/seating.css", "seating.css"],
   ]);
   const filename = staticFiles.get(url.pathname);
 

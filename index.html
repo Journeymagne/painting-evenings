@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Вечер покраса у Карповых</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/seating.css" />
   </head>
   <body>
     <main class="app-shell">
@@ -35,7 +36,15 @@
         </div>
       </div>
 
-      <section class="workspace" aria-label="Бронирование мест">
+      <section id="archiveIndex" class="archive-index" aria-labelledby="archiveTitle" hidden>
+        <p class="eyebrow">История встреч</p>
+        <h2 id="archiveTitle">Прошедшие вечера</h2>
+        <p class="archive-description">Выберите день, чтобы посмотреть рассадку и участников.</p>
+        <ul id="archiveList" class="archive-list"></ul>
+      </section>
+      <a id="archiveBack" class="archive-back" href="/archive" hidden>← Все прошедшие вечера</a>
+
+      <section class="workspace" id="dayWorkspace" aria-label="Бронирование мест">
         <div class="places">
           <div class="section-title">
             <div>
@@ -53,7 +62,15 @@
               <button class="ghost-button" id="clearAllButton" type="button">Очистить</button>
             </div>
           </div>
-          <div class="cards-grid" id="cardsGrid"></div>
+          <section id="seatingPlan" class="seating-plan" aria-label="Схема столов">
+            <header class="plan-heading">
+              <div><p class="eyebrow">Выберите своё место</p><h2 id="planTitle">План зала</h2></div>
+              <span class="plan-capacity">4 стола · 16 мест</span>
+            </header>
+            <div class="seat-legend"><span><i class="legend-free"></i>Свободно</span><span><i class="legend-booked"></i>Занято</span></div>
+            <p id="planHint" class="plan-hint">Нажмите на место, чтобы записаться.</p>
+            <div class="room-map" id="cardsGrid"></div>
+          </section>
         </div>
 
         <aside class="participants" aria-label="Участники">
