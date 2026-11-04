@@ -27,9 +27,9 @@ const rows = () => pool.query("SELECT id, place_id, slot_index, created_by_user_
   try {
     await pool.query(`CREATE TABLE paint_days (id text PRIMARY KEY, is_archived boolean NOT NULL DEFAULT false);
       CREATE TABLE booking_slots (id text PRIMARY KEY, day_id text REFERENCES paint_days(id), place_id text NOT NULL,
-        slot_index integer NOT NULL, created_by_user_id text, user_id text, guest_name text, telegram text,
+        slot_index integer NOT NULL, shift_index integer NOT NULL DEFAULT 0, created_by_user_id text, user_id text, guest_name text, telegram text,
         arrival_time time, paid boolean NOT NULL DEFAULT false, updated_at timestamptz DEFAULT now(),
-        UNIQUE(day_id, place_id, slot_index));
+        UNIQUE(day_id, place_id, slot_index, shift_index));
       INSERT INTO paint_days VALUES ('day', false)`);
     await reset();
     const original = await rows();

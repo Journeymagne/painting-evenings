@@ -1,4 +1,5 @@
 node_modules
+.superpowers
 .git
 docker-compose.yml
 docker-compose.prod.yml

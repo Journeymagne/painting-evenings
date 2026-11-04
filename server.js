@@ -4,6 +4,7 @@ const http = require("http");
 const path = require("path");
 const { Pool } = require("pg");
 const { movePaintBooking } = require("./move-booking");
+const { migrateShifts, shiftIndexOf, changeBookings } = require("./shift-bookings");
 
 const PORT = Number(process.env.PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL || "postgres://paint:paint@localhost:5432/paint_tracker";
@@ -119,6 +120,7 @@ async function initDb() {
   await pool.query("ALTER TABLE paint_days ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false");
   await pool.query("ALTER TABLE booking_slots ADD COLUMN IF NOT EXISTS created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL");
   await pool.query("ALTER TABLE booking_slots ALTER COLUMN arrival_time DROP NOT NULL");
+  await migrateShifts(pool);
   await pool.query("UPDATE booking_slots SET created_by_user_id = user_id WHERE created_by_user_id IS NULL");
   await pool.query(`
     UPDATE users
@@ -237,6 +239,7 @@ async function getState(req, res) {
         day_id AS "dayId",
         place_id AS "placeId",
         slot_index AS "slotIndex",
+        shift_index AS "shiftIndex",
         user_id AS "userId",
         created_by_user_id AS "createdByUserId",
         guest_name AS name,
@@ -244,7 +247,7 @@ async function getState(req, res) {
         to_char(arrival_time, 'HH24:MI') AS time,
         paid
       FROM booking_slots
-      ORDER BY day_id, place_id, slot_index
+      ORDER BY day_id, shift_index, place_id, slot_index
     `),
     currentUser
       ? pool.query('SELECT id, name, telegram, is_admin AS "isAdmin" FROM users ORDER BY lower(name), name')
@@ -259,6 +262,7 @@ async function getState(req, res) {
       theme: row.theme || "",
       isArchived: Boolean(row.isArchived),
       bookings: {},
+      shiftBookings: [{}, {}],
     };
     dayMap.set(day.id, day);
     return day;
@@ -270,13 +274,15 @@ async function getState(req, res) {
       return;
     }
 
-    if (!day.bookings[row.placeId]) {
-      day.bookings[row.placeId] = [];
+    const bookings = day.shiftBookings[row.shiftIndex];
+    if (!bookings[row.placeId]) {
+      bookings[row.placeId] = [];
     }
 
-    day.bookings[row.placeId][row.slotIndex] = {
+    bookings[row.placeId][row.slotIndex] = {
       bookingId: row.id,
       slotIndex: row.slotIndex,
+      shiftIndex: row.shiftIndex,
       userId: row.userId,
       canDelete: Boolean(currentUser?.isAdmin || row.createdByUserId === currentUser?.id),
       name: row.name,
@@ -284,6 +290,7 @@ async function getState(req, res) {
       time: row.time,
       paid: row.paid,
     };
+    day.bookings = day.shiftBookings[0];
   });
 
   sendJson(res, 200, {
@@ -516,159 +523,15 @@ async function updateDayTheme(req, res, dayId) {
 }
 
 async function replacePlaceBookings(req, res, dayId, placeId, currentUser) {
-  const place = placeById.get(placeId);
-  if (!place) {
-    sendError(res, 404, "Место не найдено.");
-    return;
-  }
-
-  const dayResult = await pool.query("SELECT id, is_archived AS \"isArchived\" FROM paint_days WHERE id = $1", [dayId]);
-  if (!dayResult.rowCount) {
-    sendError(res, 404, "Вечер не найден.");
-    return;
-  }
-  if (dayResult.rows[0].isArchived) {
-    sendError(res, 403, "Архивный вечер доступен только для просмотра.");
-    return;
-  }
-
-  const body = await readBody(req);
-  const existingResult = await pool.query(
-    `
-      SELECT
-        slot_index AS "slotIndex",
-        user_id AS "userId",
-        created_by_user_id AS "createdByUserId",
-        guest_name AS name,
-        telegram,
-        to_char(arrival_time, 'HH24:MI') AS time,
-        paid
-      FROM booking_slots
-      WHERE day_id = $1 AND place_id = $2
-      ORDER BY slot_index
-    `,
-    [dayId, placeId],
-  );
-  const existingBySlot = new Map(existingResult.rows.map((row) => [row.slotIndex, row]));
-  const rawPlayers = Array.isArray(body.players) ? body.players : [];
-  const players = [];
-
-  for (let slotIndex = 0; slotIndex < place.capacity; slotIndex += 1) {
-    const existing = existingBySlot.get(slotIndex);
-    const isForeignSlot = Boolean(existing && !currentUser.isAdmin && existing.createdByUserId !== currentUser.id);
-    const rawPlayer = rawPlayers[slotIndex] || {};
-
-    if (isForeignSlot) {
-      players.push({
-        slotIndex,
-        userId: existing.userId || null,
-        createdByUserId: existing.createdByUserId || null,
-        name: existing.name,
-        telegram: existing.telegram,
-        time: existing.time,
-        paid: Boolean(existing.paid),
-      });
-      continue;
-    }
-
-    const name = String(rawPlayer.name || "").trim();
-    const telegramRaw = String(rawPlayer.telegram || "").trim();
-    const telegram = normalizeTelegram(telegramRaw);
-    const time = String(rawPlayer.time || "").trim();
-    const hasAnyValue = Boolean(name || telegramRaw || time);
-
-    if (!hasAnyValue) {
-      continue;
-    }
-
-    players.push({
-      slotIndex,
-      userId: rawPlayer.userId || null,
-      createdByUserId: existing?.createdByUserId || currentUser.id,
-      name,
-      telegram,
-      time,
-      paid: currentUser.isAdmin ? Boolean(rawPlayer.paid) : Boolean(existing?.paid),
-    });
-  }
-
-  if (!players.length) {
-    sendError(res, 400, "Добавьте хотя бы одного игрока.");
-    return;
-  }
-
-  for (const player of players) {
-    if (!player.name || !player.telegram || (player.time && !isValidTime(player.time))) {
-      sendError(res, 400, "У каждого игрока должны быть имя и Telegram. Время, если указано, должно быть в формате чч:мм.");
-      return;
-    }
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2", [dayId, placeId]);
-
-    for (const player of players) {
-      await client.query(
-        `
-          INSERT INTO booking_slots (
-            id,
-            day_id,
-            place_id,
-            slot_index,
-            user_id,
-            created_by_user_id,
-            guest_name,
-            telegram,
-            arrival_time,
-            paid
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        `,
-        [
-          createId("booking"),
-          dayId,
-          placeId,
-          player.slotIndex,
-          player.userId,
-          player.createdByUserId,
-          player.name,
-          player.telegram,
-          player.time || null,
-          player.paid,
-        ],
-      );
-    }
-
-    await client.query("COMMIT");
-    sendJson(res, 200, { ok: true });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  const result = await changeBookings(pool, dayId, placeById.get(placeId), currentUser, await readBody(req));
+  if (result.error) sendError(res, result.status, result.error);
+  else sendJson(res, 200, { ok: true });
 }
 
 async function deletePlaceBookings(req, res, dayId, placeId, currentUser) {
-  if (!(await ensureDayEditable(res, dayId))) {
-    return;
-  }
-
-  const result = currentUser.isAdmin
-    ? await pool.query("DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2", [dayId, placeId])
-    : await pool.query(
-        "DELETE FROM booking_slots WHERE day_id = $1 AND place_id = $2 AND created_by_user_id = $3",
-        [dayId, placeId, currentUser.id],
-      );
-
-  if (!result.rowCount && !currentUser.isAdmin) {
-    sendError(res, 403, "Можно удалить только записи, которые вы добавили.");
-    return;
-  }
-
-  sendJson(res, 200, { ok: true });
+  const result = await changeBookings(pool, dayId, placeById.get(placeId), currentUser, await readBody(req), true);
+  if (result.error) sendError(res, result.status, result.error);
+  else sendJson(res, 200, { ok: true });
 }
 
 async function updateDayArchive(req, res, dayId) {
@@ -715,6 +578,8 @@ async function updatePaid(req, res, dayId, placeId, slotIndex) {
 
   const body = await readBody(req);
   const paid = Boolean(body.paid);
+  const shiftIndex = shiftIndexOf(body);
+  if (shiftIndex === null) { sendError(res, 400, "Некорректная смена."); return; }
   const numericSlotIndex = Number(slotIndex);
 
   if (!Number.isInteger(numericSlotIndex) || numericSlotIndex < 0) {
@@ -726,9 +591,9 @@ async function updatePaid(req, res, dayId, placeId, slotIndex) {
     `
       UPDATE booking_slots
       SET paid = $1, updated_at = now()
-      WHERE day_id = $2 AND place_id = $3 AND slot_index = $4
+      WHERE day_id = $2 AND place_id = $3 AND slot_index = $4 AND shift_index = $5
     `,
-    [paid, dayId, placeId, numericSlotIndex],
+    [paid, dayId, placeId, numericSlotIndex, shiftIndex],
   );
 
   if (!result.rowCount) {

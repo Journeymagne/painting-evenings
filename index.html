@@ -15,8 +15,8 @@
         </div>
         <div class="topbar-right">
           <div class="stats" aria-label="Сводка мест">
-            <span><b id="reservedCount">0</b> занято</span>
-            <span><b id="freeCount">16</b> свободно</span>
+            <span><b id="reservedCount">0</b> записей</span>
+            <span><b id="freeCount">32</b> свободно по сменам</span>
           </div>
           <div class="account-box" aria-label="Профиль">
             <span id="accountStatus">Не вошли</span>
@@ -65,9 +65,10 @@
           <section id="seatingPlan" class="seating-plan" aria-label="Схема столов">
             <header class="plan-heading">
               <div><p class="eyebrow">Выберите своё место</p><h2 id="planTitle">План зала</h2></div>
-              <span class="plan-capacity">4 стола · 16 мест</span>
+              <span class="plan-capacity">4 стола · 16 мест · 2 смены</span>
             </header>
             <div class="seat-legend"><span><i class="legend-free"></i>Свободно</span><span><i class="legend-booked"></i>Занято</span></div>
+            <p id="shiftSummary" class="plan-hint"></p>
             <p id="planHint" class="plan-hint">Нажмите на место, чтобы записаться.</p>
             <p id="seatMoveStatus" class="seat-move-status" role="status" aria-live="polite"></p>
             <div class="room-map" id="cardsGrid"></div>

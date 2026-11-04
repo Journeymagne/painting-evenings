@@ -1,8 +1,10 @@
-// Move the existing booking rows so ownership, payment and arrival time survive.
+const { shiftIndexOf } = require("./shift-bookings");
+// Move the existing booking rows within one shift; preserve ownership/payment.
 async function movePaintBooking(pool, dayId, user, body) {
   const { fromPlaceId, toPlaceId, bookingId, targetBookingId } = body || {};
+  const shiftIndex = shiftIndexOf(body);
   if (!/^paint-[1-8]$/.test(fromPlaceId) || !/^paint-[1-8]$/.test(toPlaceId) ||
-      fromPlaceId === toPlaceId || typeof bookingId !== "string" || !bookingId ||
+      shiftIndex === null || fromPlaceId === toPlaceId || typeof bookingId !== "string" || !bookingId ||
       !(targetBookingId === null || typeof targetBookingId === "string")) {
     return { status: 400, error: "Выберите разные кресла за покрасочным столом." };
   }
@@ -20,8 +22,8 @@ async function movePaintBooking(pool, dayId, user, body) {
     }
     const result = await client.query(
       `SELECT id, place_id AS "placeId", created_by_user_id AS "createdByUserId"
-       FROM booking_slots WHERE day_id = $1 AND place_id = ANY($2::text[]) AND slot_index = 0
-       ORDER BY place_id FOR UPDATE`, [dayId, [fromPlaceId, toPlaceId]],
+       FROM booking_slots WHERE day_id = $1 AND place_id = ANY($2::text[]) AND slot_index = 0 AND shift_index = $3
+       ORDER BY place_id FOR UPDATE`, [dayId, [fromPlaceId, toPlaceId], shiftIndex],
     );
     const source = result.rows.find(row => row.placeId === fromPlaceId);
     const target = result.rows.find(row => row.placeId === toPlaceId);

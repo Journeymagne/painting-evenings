@@ -15,6 +15,16 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             cd ~/painting-evenings
             git pull
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            for attempt in $(seq 1 30); do
+              if docker compose -f docker-compose.prod.yml exec -T app node -e "fetch('http://127.0.0.1:' + process.env.PORT + '/api/state').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"; then
+                echo "Application and database are ready"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Application did not become ready after deployment"
+            exit 1
