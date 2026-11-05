@@ -1,12 +1,13 @@
 const { shiftIndexOf } = require("./shift-bookings");
-// Move the existing booking rows within one shift; preserve ownership/payment.
+// Move the existing booking rows between seats and shifts; preserve ownership/payment.
 async function movePaintBooking(pool, dayId, user, body) {
   const { fromPlaceId, toPlaceId, bookingId, targetBookingId } = body || {};
   const shiftIndex = shiftIndexOf(body);
+  const toShiftIndex = body?.toShiftIndex === undefined ? shiftIndex : shiftIndexOf({ shiftIndex: body.toShiftIndex });
   if (!/^paint-[1-8]$/.test(fromPlaceId) || !/^paint-[1-8]$/.test(toPlaceId) ||
-      shiftIndex === null || fromPlaceId === toPlaceId || typeof bookingId !== "string" || !bookingId ||
+      shiftIndex === null || toShiftIndex === null || (fromPlaceId === toPlaceId && shiftIndex === toShiftIndex) || typeof bookingId !== "string" || !bookingId ||
       !(targetBookingId === null || typeof targetBookingId === "string")) {
-    return { status: 400, error: "Выберите разные кресла за покрасочным столом." };
+    return { status: 400, error: "Выберите разные места или смены за покрасочным столом." };
   }
   const client = await pool.connect();
   try {
@@ -21,12 +22,13 @@ async function movePaintBooking(pool, dayId, user, body) {
       return error;
     }
     const result = await client.query(
-      `SELECT id, place_id AS "placeId", created_by_user_id AS "createdByUserId"
-       FROM booking_slots WHERE day_id = $1 AND place_id = ANY($2::text[]) AND slot_index = 0 AND shift_index = $3
-       ORDER BY place_id FOR UPDATE`, [dayId, [fromPlaceId, toPlaceId], shiftIndex],
+      `SELECT id, place_id AS "placeId", shift_index AS "shiftIndex", created_by_user_id AS "createdByUserId"
+       FROM booking_slots WHERE day_id = $1 AND slot_index = 0
+         AND ((place_id = $2 AND shift_index = $3) OR (place_id = $4 AND shift_index = $5))
+       ORDER BY place_id, shift_index FOR UPDATE`, [dayId, fromPlaceId, shiftIndex, toPlaceId, toShiftIndex],
     );
-    const source = result.rows.find(row => row.placeId === fromPlaceId);
-    const target = result.rows.find(row => row.placeId === toPlaceId);
+    const source = result.rows.find(row => row.placeId === fromPlaceId && row.shiftIndex === shiftIndex);
+    const target = result.rows.find(row => row.placeId === toPlaceId && row.shiftIndex === toShiftIndex);
     if (source?.id !== bookingId || (target?.id || null) !== targetBookingId) {
       error = { status: 409, error: "Рассадка уже изменилась. Обновили места — попробуйте ещё раз." };
     } else if (!user.isAdmin && [source, target].filter(Boolean).some(row => row.createdByUserId !== user.id)) {
@@ -40,9 +42,9 @@ async function movePaintBooking(pool, dayId, user, body) {
       // A temporary slot avoids the immediate unique constraint during a swap.
       // It is never visible outside this transaction.
       await client.query("UPDATE booking_slots SET slot_index = -1 WHERE id = $1", [source.id]);
-      await client.query("UPDATE booking_slots SET place_id = $1, updated_at = now() WHERE id = $2", [fromPlaceId, target.id]);
+      await client.query("UPDATE booking_slots SET place_id = $1, shift_index = $2, updated_at = now() WHERE id = $3", [fromPlaceId, shiftIndex, target.id]);
     }
-    await client.query("UPDATE booking_slots SET place_id = $1, slot_index = 0, updated_at = now() WHERE id = $2", [toPlaceId, source.id]);
+    await client.query("UPDATE booking_slots SET place_id = $1, slot_index = 0, shift_index = $2, updated_at = now() WHERE id = $3", [toPlaceId, toShiftIndex, source.id]);
     await client.query("COMMIT");
     return { status: 200, swapped: Boolean(target) };
   } catch (error) {

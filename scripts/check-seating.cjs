@@ -36,15 +36,16 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
           rejectNextMove = false;
           return route.fulfill({ status: 409, json: { error: "Рассадка уже изменилась." } });
         }
-        const { fromPlaceId, toPlaceId, bookingId, targetBookingId, shiftIndex } = request.postDataJSON();
+        const { fromPlaceId, toPlaceId, bookingId, targetBookingId, shiftIndex, toShiftIndex = shiftIndex } = request.postDataJSON();
         const day = state.days.find(item => item.id === url.pathname.split("/")[3]);
         const bookings = day.shiftBookings[shiftIndex];
+        const targetBookings = day.shiftBookings[toShiftIndex];
         const source = bookings[fromPlaceId]?.[0];
-        const target = bookings[toPlaceId]?.[0];
+        const target = targetBookings[toPlaceId]?.[0];
         assert.equal(source.bookingId, bookingId);
         assert.equal(target?.bookingId || null, targetBookingId);
-        bookings[fromPlaceId] = target ? [target] : [];
-        bookings[toPlaceId] = [source];
+        bookings[fromPlaceId] = target ? [{ ...target, shiftIndex }] : [];
+        targetBookings[toPlaceId] = [{ ...source, shiftIndex: toShiftIndex }];
         return route.fulfill({ json: { ok: true, swapped: Boolean(target) } });
       }
       if (request.method() === "PUT" && url.pathname.includes("/bookings/")) {
@@ -116,10 +117,10 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     await page.waitForFunction(() => document.querySelector('.seat[data-place-id="kitchen-table"][data-slot-index="1"][data-shift-index="1"]').classList.contains("is-booked"));
     assert.equal(await page.locator('.seat[data-place-id="kitchen-table"][data-slot-index="0"][data-shift-index="0"]').getAttribute("class"), "seat");
     const chair = (id, shift = 0) => page.locator(`.seat[data-place-id="${id}"][data-shift-index="${shift}"]`).first();
-    async function drag(from, to, shift = 0) {
+    async function drag(from, to, shift = 0, toShift = shift) {
       await page.locator(".common-zone").scrollIntoViewIfNeeded();
       const a = await chair(from, shift).boundingBox();
-      const b = await chair(to, shift).boundingBox();
+      const b = await chair(to, toShift).boundingBox();
       await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
       await page.mouse.down();
       await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
@@ -152,7 +153,14 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     await page.keyboard.press("Space");
     await page.locator('.seat[data-place-id="paint-1"][data-shift-index="1"]').focus();
     await page.keyboard.press("Enter");
-    assert.equal(moveRequests, 2, "Cannot move across shifts");
+    await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участник перемещён.");
+    assert.equal(active.shiftBookings[1]["paint-1"][0].name, "Алиса");
+    assert.equal(active.bookings["paint-2"].length, 0);
+    await page.keyboard.press("Space");
+    await chair("paint-2", 0).focus();
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участник перемещён.");
+    assert.equal(active.bookings["paint-2"][0].name, "Алиса");
     rejectNextMove = true;
     await drag("paint-2", "paint-1");
     await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Рассадка уже изменилась.");
@@ -176,6 +184,17 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участник перемещён.");
     assert.equal(active.shiftBookings[1]["paint-6"][0].bookingId, "second-shift");
     assert.equal(active.bookings["paint-3"][0].name, "Давид");
+    await drag("paint-6", "paint-6", 1, 0);
+    await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участник перемещён.");
+    assert.equal(active.bookings["paint-6"][0].bookingId, "second-shift");
+    await drag("paint-6", "paint-6", 0, 1);
+    await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участник перемещён.");
+    await drag("paint-6", "paint-3", 1, 0);
+    await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участники поменялись местами.");
+    assert.equal(active.bookings["paint-3"][0].bookingId, "second-shift");
+    await drag("paint-3", "paint-6", 0, 1);
+    await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участники поменялись местами.");
+    assert.equal(active.shiftBookings[1]["paint-6"][0].bookingId, "second-shift");
     await page.locator("#participantsTab").click();
     await page.locator('.paid-checkbox[data-place-id="kitchen-table"][data-slot-index="1"][data-shift-index="1"]').check();
     await page.waitForFunction(() => document.querySelector('.paid-checkbox[data-place-id="kitchen-table"][data-slot-index="1"][data-shift-index="1"]').checked);
@@ -233,13 +252,14 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator(".common-zone").scrollIntoViewIfNeeded();
     const a = await chair("paint-1").boundingBox();
-    const b = await chair("paint-2").boundingBox();
+    const b = await chair("paint-2", 1).boundingBox();
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: a.x + 22, y: a.y + 22 }] });
     for (let step = 1; step <= 8; step++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: a.x + 22 + (b.x - a.x) * step / 8, y: a.y + 22 + (b.y - a.y) * step / 8 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участник перемещён.");
-    assert.equal(active.bookings["paint-2"][0].name, "Алиса");
+    assert.equal(active.shiftBookings[1]["paint-2"][0].name, "Алиса");
+    assert.equal(active.bookings["paint-1"].length, 0);
     await cdp.detach();
     // Empty archive has no phantom day, stats or editable controls.
     state.days = state.days.filter(day => !day.isArchived);
@@ -248,7 +268,7 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     assert.equal(await page.locator(".archive-day-link").count(), 0);
     assert.equal(await page.locator(".stats").isVisible(), false);
     assert.deepEqual(errors, []);
-    console.log("PASS: two-shift registration, exact seat/shift persistence, separate payment/release, shift-specific mouse/touch/keyboard moves, cross-shift rejection, archive/history, responsive layout, no JS errors.");
+    console.log("PASS: two-shift registration, exact seat/shift persistence, separate payment/release, shift-specific mouse/touch/keyboard moves, cross-shift moves/swaps, archive/history, responsive layout, no JS errors.");
     console.log(`Previews: ${output}`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

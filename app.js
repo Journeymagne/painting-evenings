@@ -792,7 +792,7 @@ function renderSeatingPlan() {
   document.querySelector("#planHint").textContent = activeDay?.isArchived
     ? "Рассадка прошедшего вечера · только просмотр."
     : activeDay ? appState.currentUser
-      ? "1-я смена — 19:00–21:00, 2-я — 21:00–00:00. Нажмите на строку для записи. Перетаскивание — между креслами одной смены. С клавиатуры: пробел, Tab, Enter."
+      ? "1-я смена — 19:00–21:00, 2-я — 21:00–00:00. Нажмите на строку для записи. Перетаскивайте между креслами и сменами; занятые места обмениваются участниками. С клавиатуры: пробел, Tab, Enter."
       : "1-я смена — 19:00–21:00, 2-я — 21:00–00:00. Нажмите на свободную строку, чтобы записаться."
     : "Создайте вечер, чтобы открыть запись.";
   cardsGrid.innerHTML = `
@@ -878,7 +878,7 @@ function canMovePaintSeat(placeId, shiftIndex = 0) {
 }
 
 function canDropPaintSeat(placeId, shiftIndex) {
-  if (!seatDrag || shiftIndex !== seatDrag.shiftIndex || seatDrag.dayId !== getActiveDay()?.id || placeId === seatDrag.fromPlaceId || !/^paint-[1-8]$/.test(placeId)) return false;
+  if (!seatDrag || ![0, 1].includes(shiftIndex) || seatDrag.dayId !== getActiveDay()?.id || (placeId === seatDrag.fromPlaceId && shiftIndex === seatDrag.shiftIndex) || !/^paint-[1-8]$/.test(placeId)) return false;
   return !getBookingSlots(placeId, shiftIndex)[0] || canMovePaintSeat(placeId, shiftIndex);
 }
 
@@ -914,7 +914,7 @@ async function finishSeatDrag(toPlaceId, toShiftIndex) {
     return;
   }
   const { dayId, fromPlaceId, bookingId, shiftIndex } = seatDrag;
-  const targetBookingId = getBookingSlots(toPlaceId, shiftIndex)[0]?.bookingId || null;
+  const targetBookingId = getBookingSlots(toPlaceId, toShiftIndex)[0]?.bookingId || null;
   cancelSeatDrag();
   seatMoveBusy = true;
   cardsGrid.setAttribute("aria-busy", "true");
@@ -922,11 +922,11 @@ async function finishSeatDrag(toPlaceId, toShiftIndex) {
   status.textContent = "Сохраняем рассадку…";
   try {
     const result = await apiFetch(`/api/days/${encodeURIComponent(dayId)}/bookings/move`, {
-      method: "POST", body: { fromPlaceId, toPlaceId, bookingId, targetBookingId, shiftIndex },
+      method: "POST", body: { fromPlaceId, toPlaceId, bookingId, targetBookingId, shiftIndex, toShiftIndex },
     });
     await loadApp(dayId);
     status.textContent = result.swapped ? "Участники поменялись местами." : "Участник перемещён.";
-    cardsGrid.querySelector(`.seat[data-place-id="${toPlaceId}"][data-shift-index="${shiftIndex}"]`)?.focus();
+    cardsGrid.querySelector(`.seat[data-place-id="${toPlaceId}"][data-shift-index="${toShiftIndex}"]`)?.focus();
   } catch (error) {
     await loadApp(dayId);
     status.textContent = error.message;

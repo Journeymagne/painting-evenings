@@ -79,6 +79,22 @@ const player = name => ({ name, telegram: `@${name}`, time: "19:00" });
     assert.deepEqual(day.shiftBookings[0], firstShift);
     assert.equal(day.shiftBookings[1]["paint-2"][0].name, "Bob2");
     assert.equal(day.shiftBookings[1]["paint-2"][0].paid, true);
+    // HTTP requests move across shifts, including the same physical chair.
+    const sameChair = { fromPlaceId: "paint-2", toPlaceId: "paint-2", shiftIndex: 1, toShiftIndex: 0, bookingId: bobId, targetBookingId: null };
+    assert.equal((await api(`${base}/move`, "POST", sameChair, admin.token)).status, 200);
+    day = await getDay();
+    assert.equal(day.shiftBookings[0]["paint-2"][0].bookingId, bobId);
+    assert.equal(day.shiftBookings[0]["paint-2"][0].paid, true);
+    assert.equal(day.shiftBookings[1]["paint-2"]?.filter(Boolean).length || 0, 0);
+    assert.equal((await api(`${base}/move`, "POST", { ...sameChair, shiftIndex: 0, toShiftIndex: 1 }, admin.token)).status, 200);
+    const crossSwap = { ...sameChair, toPlaceId: "paint-1", targetBookingId: firstShift["paint-1"][0].bookingId };
+    assert.equal((await api(`${base}/move`, "POST", crossSwap, admin.token)).status, 200);
+    day = await getDay();
+    assert.equal(day.shiftBookings[0]["paint-1"][0].bookingId, bobId);
+    assert.equal(day.shiftBookings[1]["paint-2"][0].bookingId, crossSwap.targetBookingId);
+    assert.equal((await api(`${base}/move`, "POST", { ...crossSwap, fromPlaceId: "paint-1", toPlaceId: "paint-2", shiftIndex: 0, toShiftIndex: 1 }, admin.token)).status, 200);
+    day = await getDay();
+    assert.deepEqual(day.shiftBookings[0], firstShift);
     const secondShift = structuredClone(day.shiftBookings[1]);
     // Missing shift on old delete requests cannot erase shift 1.
     assert.equal((await api(`${base}/paint-1`, "DELETE", {}, admin.token)).status, 200);
