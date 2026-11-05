@@ -117,6 +117,7 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     assert.equal(await page.locator('.seat[data-place-id="kitchen-table"][data-slot-index="0"][data-shift-index="0"]').getAttribute("class"), "seat");
     const chair = (id, shift = 0) => page.locator(`.seat[data-place-id="${id}"][data-shift-index="${shift}"]`).first();
     async function drag(from, to, shift = 0) {
+      await page.locator(".common-zone").scrollIntoViewIfNeeded();
       const a = await chair(from, shift).boundingBox();
       const b = await chair(to, shift).boundingBox();
       await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);

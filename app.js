@@ -811,13 +811,13 @@ function renderSeatingPlan() {
 
   const paintingPositions = [[50, 9], [12, 29], [88, 29], [12, 51], [88, 51], [12, 73], [88, 73], [50, 90]];
   paintingPositions.forEach(([x, y], index) => appendSeat(".common-zone", `paint-${index + 1}`, 0, x, y, String(index + 1)));
-  appendSeat(".tea-zone", "tea-table", 0, 50, 12, "1");
-  appendSeat(".tea-zone", "tea-table", 1, 50, 91, "2");
+  appendSeat(".tea-zone", "tea-table", 0, 50, 16, "1");
+  appendSeat(".tea-zone", "tea-table", 1, 50, 86, "2");
   appendSeat(".big-zone", "big-table-1", 0, 11, 28, "А1");
   appendSeat(".big-zone", "big-table-1", 1, 89, 28, "А2");
   appendSeat(".big-zone", "big-table-2", 0, 11, 75, "Б1");
   appendSeat(".big-zone", "big-table-2", 1, 89, 75, "Б2");
-  appendSeat(".kitchen-zone", "kitchen-table", 0, 50, 12, "1");
+  appendSeat(".kitchen-zone", "kitchen-table", 0, 50, 16, "1");
   appendSeat(".kitchen-zone", "kitchen-table", 1, 50, 84, "2");
 }
 

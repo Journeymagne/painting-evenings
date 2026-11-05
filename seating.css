@@ -17,7 +17,7 @@
 .seat-legend i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--seat-line); background: var(--seat-bg); }
 .seat-legend .legend-booked { border-color: var(--occupied-line); background: var(--occupied-bg); }
 .plan-hint { margin: 10px 0 6px; color: var(--map-muted); font-size: 12px; }
-.room-map { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 360px 430px 370px; gap: 14px 48px; max-width: 1100px; margin: 14px auto 0; }
+.room-map { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 500px 460px 460px; gap: 28px 64px; max-width: 1240px; margin: 14px auto 0; }
 .table-zone { position: relative; min-width: 0; }
 .common-zone { grid-row: span 2; }
 .kitchen-zone { grid-column: 1 / -1; width: 100%; max-width: 520px; justify-self: center; }
@@ -34,13 +34,13 @@
 .big-surface > div + div { border-top: 2px dashed var(--table-border); }
 .big-surface strong { font-size: 14px; }
 .kitchen-surface { left: 32.5%; top: 35%; width: 35%; height: 124px; border-radius: 26px; padding: 8px; gap: 4px; }
-.chair { position: absolute; transform: translate(-50%, -50%); width: 128px; display: grid; gap: 4px; }
-.chair-label { font-size: 9px; color: var(--map-muted); text-align: center; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 2px; }
-.seat { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 44px; border: 1px solid var(--seat-line); border-radius: 7px; padding: 5px 7px; color: var(--seat-ink); background: var(--seat-bg); text-align: left; }
-.shift-number { font-size: 11px; font-weight: 650; border-right: 1px solid #b6ab9950; padding-right: 7px; min-width: 40px; white-space: nowrap; }
+.chair { position: absolute; transform: translate(-50%, -50%); width: 160px; display: grid; gap: 6px; }
+.chair-label { font-size: 11px; color: var(--map-muted); text-align: center; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 2px; }
+.seat { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 56px; border: 1px solid var(--seat-line); border-radius: 9px; padding: 8px 10px; color: var(--seat-ink); background: var(--seat-bg); text-align: left; }
+.shift-number { font-size: 13px; font-weight: 650; border-right: 1px solid #b6ab9950; padding-right: 7px; min-width: 46px; white-space: nowrap; }
 .shift-person { min-width: 0; display: grid; gap: 2px; }
-.seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.25; }
-.seat-time { font-size: 9px; color: var(--map-muted); line-height: 1.1; }
+.seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.25; }
+.seat-time { font-size: 11px; color: var(--map-muted); line-height: 1.1; }
 .seat.is-booked { background: var(--occupied-bg); border-color: var(--occupied-line); color: var(--occupied-ink); }
 .seat.is-mine { box-shadow: inset 3px 0 var(--occupied-line); }
 .seat:not(:disabled):hover { filter: brightness(1.2); }
@@ -67,26 +67,26 @@
 .archive-day-theme { overflow-wrap: anywhere; }
 .archive-day-count { color: var(--muted); font-size: 13px; }
 .archive-back { display: inline-block; color: var(--accent-dark); text-decoration: none; margin: 2px 0 22px; font-size: 14px; }
-@media (max-width: 1100px) {
-  .room-map { grid-template-columns: 1fr; grid-template-rows: 760px 360px 430px 370px; gap: 16px; max-width: 520px; margin: 18px auto 0; }
+@media (max-width: 1280px) {
+  .room-map { grid-template-columns: 1fr; grid-template-rows: 960px 500px 460px 460px; gap: 16px; max-width: 620px; margin: 18px auto 0; }
   .common-zone { grid-row: auto; }
-  .chair { width: clamp(60px, 24%, 124px); }
+  .chair { width: 26%; }
 }
 @media (max-width: 680px) {
   .seating-plan { padding: 18px 12px; }
   .plan-heading { align-items: flex-start; }
   .plan-heading h2 { font-size: 23px; }
   .plan-capacity { font-size: 10px; }
-  .room-map { grid-template-columns: 1fr; grid-template-rows: 760px 360px 430px 370px; gap: 16px; max-width: 400px; margin: 18px auto 0; }
+  .room-map { grid-template-columns: 1fr; grid-template-rows: 960px 500px 460px 460px; gap: 16px; max-width: 400px; margin: 18px auto 0; }
   .common-zone { grid-row: auto; }
   .kitchen-zone { width: 100%; }
-  .chair { width: 24%; }
+  .chair-label { font-size: 10px; }
   .seat { flex-direction: column; justify-content: center; }
-  .shift-number { border-right: 0; padding-right: 0; min-width: 0; font-size: 10px; }
+  .shift-number { border-right: 0; padding-right: 0; min-width: 0; font-size: 12px; }
   .shift-person { width: 100%; text-align: center; }
   .seat-time { display: none; }
   .seat { padding: 5px 3px; gap: 3px; }
-  .seat-name { font-size: 10px; }
+  .seat-name { font-size: 12px; }
   .seat-time { font-size: 10px; }
   .table-surface strong { font-size: 17px; }
   .archive-day-link { grid-template-columns: 1fr auto; gap: 10px; padding: 20px 8px; }
