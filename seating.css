@@ -1,4 +1,6 @@
 /* Floor plan: each chair maps to an existing booking slot. */
+.workspace { grid-template-columns: minmax(0, 1fr); }
+.participants { position: static; border-left: 0; border-top: 1px solid var(--line); padding-left: 0; padding-top: 22px; }
 .seating-plan { --map-bg: #1b1915; --map-ink: #f0e7d8; --map-muted: #b6ab99; --table-bg: #302b22; --table-border: #74614a; --seat-bg: #25251e; --seat-line: #d6ae78; --seat-ink: #efc892; --occupied-bg: #214637; --occupied-line: #66b38b; --occupied-ink: #c7f2d6; padding: 24px; border: 1px solid #454034; border-radius: 16px; background: var(--map-bg); color: var(--map-ink); }
 .plan-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .plan-heading .eyebrow { color: var(--map-muted); font-size: 10px; letter-spacing: 1.8px; font-weight: 600; }
@@ -9,27 +11,27 @@
 .seat-legend i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--seat-line); background: var(--seat-bg); }
 .seat-legend .legend-booked { border-color: var(--occupied-line); background: var(--occupied-bg); }
 .plan-hint { margin: 10px 0 6px; color: var(--map-muted); font-size: 12px; }
-.room-map { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 310px 340px 350px; gap: 14px 48px; margin-top: 14px; }
+.room-map { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 360px 430px 370px; gap: 14px 48px; max-width: 1100px; margin: 14px auto 0; }
 .table-zone { position: relative; min-width: 0; }
 .common-zone { grid-row: span 2; }
-.kitchen-zone { grid-column: 1 / -1; width: 70%; max-width: 420px; justify-self: center; }
+.kitchen-zone { grid-column: 1 / -1; width: 100%; max-width: 520px; justify-self: center; }
 .table-surface { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--table-border); border-radius: 10px; background: var(--table-bg); text-align: center; padding: 12px; box-shadow: inset 0 0 0 5px var(--map-bg), 0 10px 18px #00000018; }
 .table-surface strong { font-size: 16px; font-weight: 650; line-height: 1.25; }
 .table-surface > span:not(.table-mark):not(.table-decoration), .big-surface > div > span:not(.table-mark) { color: var(--map-muted); font-size: 10px; line-height: 1.45; }
 .table-surface small { color: var(--map-muted); font-size: 11px; }
 .table-mark { color: var(--map-muted); font-size: 10px; letter-spacing: 2px; font-weight: 500; }
 .table-decoration { margin-top: 28px; font-size: 34px; color: var(--seat-line); opacity: .5; }
-.common-surface { left: 30%; top: 20%; width: 40%; height: 60%; }
-.tea-surface { left: 19%; top: 38%; width: 62%; height: 24%; }
-.big-surface { left: 28%; top: 8%; width: 44%; height: 86%; padding: 0; gap: 0; }
+.common-surface { left: 27%; top: 18%; width: 46%; height: 64%; }
+.tea-surface { left: 14%; top: 32%; width: 72%; height: 38%; }
+.big-surface { left: 27%; top: 6%; width: 46%; height: 88%; padding: 0; gap: 0; }
 .big-surface > div { display: flex; flex: 1; width: 100%; flex-direction: column; gap: 6px; align-items: center; justify-content: center; padding: 8px; }
 .big-surface > div + div { border-top: 2px dashed var(--table-border); }
 .big-surface strong { font-size: 14px; }
-.kitchen-surface { left: 32.5%; top: 35%; width: 35%; height: 104px; border-radius: 26px; padding: 8px; gap: 4px; }
-.chair { position: absolute; transform: translate(-50%, -50%); width: 100px; display: grid; gap: 4px; }
+.kitchen-surface { left: 32.5%; top: 35%; width: 35%; height: 124px; border-radius: 26px; padding: 8px; gap: 4px; }
+.chair { position: absolute; transform: translate(-50%, -50%); width: 128px; display: grid; gap: 4px; }
 .chair-label { font-size: 9px; color: var(--map-muted); text-align: center; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 2px; }
 .seat { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 44px; border: 1px solid var(--seat-line); border-radius: 7px; padding: 5px 7px; color: var(--seat-ink); background: var(--seat-bg); text-align: left; }
-.shift-number { font-size: 11px; font-weight: 650; border-right: 1px solid #b6ab9950; padding-right: 7px; min-width: 19px; }
+.shift-number { font-size: 11px; font-weight: 650; border-right: 1px solid #b6ab9950; padding-right: 7px; min-width: 40px; white-space: nowrap; }
 .shift-person { min-width: 0; display: grid; gap: 2px; }
 .seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.25; }
 .seat-time { font-size: 9px; color: var(--map-muted); line-height: 1.1; }
@@ -59,16 +61,25 @@
 .archive-day-theme { overflow-wrap: anywhere; }
 .archive-day-count { color: var(--muted); font-size: 13px; }
 .archive-back { display: inline-block; color: var(--accent-dark); text-decoration: none; margin: 2px 0 22px; font-size: 14px; }
+@media (max-width: 1100px) {
+  .room-map { grid-template-columns: 1fr; grid-template-rows: 760px 360px 430px 370px; gap: 16px; max-width: 520px; margin: 18px auto 0; }
+  .common-zone { grid-row: auto; }
+  .chair { width: clamp(60px, 24%, 124px); }
+}
 @media (max-width: 680px) {
   .seating-plan { padding: 18px 12px; }
   .plan-heading { align-items: flex-start; }
   .plan-heading h2 { font-size: 23px; }
   .plan-capacity { font-size: 10px; }
-  .room-map { grid-template-columns: 1fr; grid-template-rows: 680px 310px 350px 350px; gap: 16px; max-width: 400px; margin: 18px auto 0; }
+  .room-map { grid-template-columns: 1fr; grid-template-rows: 760px 360px 430px 370px; gap: 16px; max-width: 400px; margin: 18px auto 0; }
   .common-zone { grid-row: auto; }
   .kitchen-zone { width: 100%; }
-  .chair { width: clamp(76px, 26%, 106px); }
-  .seat { padding: 5px; gap: 5px; }
+  .chair { width: 24%; }
+  .seat { flex-direction: column; justify-content: center; }
+  .shift-number { border-right: 0; padding-right: 0; min-width: 0; font-size: 10px; }
+  .shift-person { width: 100%; text-align: center; }
+  .seat-time { display: none; }
+  .seat { padding: 5px 3px; gap: 3px; }
   .seat-name { font-size: 10px; }
   .seat-time { font-size: 10px; }
   .table-surface strong { font-size: 17px; }

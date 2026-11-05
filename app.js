@@ -1,3 +1,6 @@
+const SHIFT_TIMES = ["19:00–21:00", "21:00–00:00"];
+const SHIFT_SHORT_TIMES = ["19–21", "21–00"];
+
 const AUTH_TOKEN_KEY = "paintTrackerAuthToken";
 
 const places = [
@@ -788,8 +791,8 @@ function renderSeatingPlan() {
   document.querySelector("#planHint").textContent = activeDay?.isArchived
     ? "Рассадка прошедшего вечера · только просмотр."
     : activeDay ? appState.currentUser
-      ? "I — 1-я смена, II — 2-я. Нажмите на строку для записи. Перетаскивание — между креслами одной смены. С клавиатуры: пробел, Tab, Enter."
-      : "I — 1-я смена, II — 2-я. Нажмите на свободную строку, чтобы записаться."
+      ? "1-я смена — 19:00–21:00, 2-я — 21:00–00:00. Нажмите на строку для записи. Перетаскивание — между креслами одной смены. С клавиатуры: пробел, Tab, Enter."
+      : "1-я смена — 19:00–21:00, 2-я — 21:00–00:00. Нажмите на свободную строку, чтобы записаться."
     : "Создайте вечер, чтобы открыть запись.";
   cardsGrid.innerHTML = `
     <section class="table-zone common-zone" aria-label="Общий стол, 8 мест">
@@ -837,9 +840,9 @@ function appendSeat(zoneSelector, placeId, slotIndex, x, y, label) {
   seat.dataset.shiftIndex = shiftIndex;
   seat.disabled = !activeDay || Boolean(activeDay.isArchived);
   const tableName = placeId.startsWith("big-table") ? `${place.title}, половина ${placeId.endsWith("1") ? "А" : "Б"}` : placeLabel(place);
-  seat.setAttribute("aria-label", `${tableName}, место ${label}, ${shiftIndex + 1}-я смена: ${status}`);
-  seat.title = `${tableName} · ${shiftIndex + 1}-я смена · ${status}`;
-  seat.innerHTML = `<b class="shift-number">${shiftIndex === 0 ? "I" : "II"}</b><span class="shift-person"><span class="seat-name">${escapeHtml(player?.name || "Свободно")}</span>${player?.time ? `<span class="seat-time">${escapeHtml(player.time)}</span>` : ""}</span>`;
+  seat.setAttribute("aria-label", `${tableName}, место ${label}, ${shiftIndex + 1}-я смена (${SHIFT_TIMES[shiftIndex]}): ${status}`);
+  seat.title = `${tableName} · ${shiftIndex + 1}-я смена (${SHIFT_TIMES[shiftIndex]}) · ${status}`;
+  seat.innerHTML = `<b class="shift-number">${SHIFT_SHORT_TIMES[shiftIndex]}</b><span class="shift-person"><span class="seat-name">${escapeHtml(player?.name || "Свободно")}</span>${player?.time ? `<span class="seat-time">${escapeHtml(player.time)}</span>` : ""}</span>`;
   seat.classList.toggle("is-movable", canMovePaintSeat(placeId, shiftIndex));
   seat.addEventListener("click", () => {
     if (seatMoveBusy || Date.now() < suppressSeatClickUntil) return;
@@ -940,7 +943,7 @@ document.addEventListener("pointermove", event => {
     highlightSeatTargets();
     const ghost = document.createElement("div");
     ghost.className = "seat-drag-ghost";
-    ghost.textContent = `${getBookingSlots(seatDrag.fromPlaceId, seatDrag.shiftIndex)[0].name} · ${seatDrag.shiftIndex + 1}-я смена`;
+    ghost.textContent = `${getBookingSlots(seatDrag.fromPlaceId, seatDrag.shiftIndex)[0].name} · ${seatDrag.shiftIndex + 1}-я смена (${SHIFT_TIMES[seatDrag.shiftIndex]})`;
     ghost.setAttribute("aria-hidden", "true");
     document.body.append(ghost);
     seatDrag.ghost = ghost;
@@ -1034,7 +1037,7 @@ function renderParticipants() {
       <td data-label="Имя">${escapeHtml(row.name)}</td>
       <td data-label="Телеграм">${escapeHtml(row.telegram)}</td>
       <td data-label="Время">${escapeHtml(row.time || "—")}</td>
-      <td data-label="Стол">${escapeHtml(placeText)}<br><strong class="participant-shift">${row.shiftIndex + 1}-я смена</strong></td>
+      <td data-label="Стол">${escapeHtml(placeText)}<br><strong class="participant-shift">${row.shiftIndex + 1}-я смена · ${SHIFT_TIMES[row.shiftIndex]}</strong></td>
       <td data-label="Оплатил">
         <label class="paid-check${canManagePayments ? "" : " is-readonly"}" title="${canManagePayments ? "Отметить оплату" : "Оплату может отметить только админ"}">
           <input
@@ -1055,7 +1058,7 @@ function renderParticipants() {
 
   reservedCount.textContent = String(rows.length);
   freeCount.textContent = String(totalCapacity * 2 - rows.length);
-  document.querySelector("#shiftSummary").textContent = [0, 1].map(shift => `${shift + 1}-я смена: ${totalCapacity - rows.filter(row => row.shiftIndex === shift).length} свободно`).join(" · ");
+  document.querySelector("#shiftSummary").textContent = [0, 1].map(shift => `${SHIFT_TIMES[shift]}: ${totalCapacity - rows.filter(row => row.shiftIndex === shift).length} свободно`).join(" · ");
 }
 
 function openBooking(placeId, selectedSlotIndex = 0, shiftIndex = 0) {
@@ -1078,7 +1081,7 @@ function openBooking(placeId, selectedSlotIndex = 0, shiftIndex = 0) {
 
   placeIdInput.value = placeId;
   const halfLabel = placeId.startsWith("big-table") ? ` · половина ${placeId.endsWith("1") ? "А" : "Б"}` : "";
-  dialogTitle.textContent = `${place.title}${halfLabel} · место ${place.capacity === 1 ? place.detail.replace("Место ", "") : selectedSlotIndex + 1} · ${shiftIndex + 1}-я смена`;
+  dialogTitle.textContent = `${place.title}${halfLabel} · место ${place.capacity === 1 ? place.detail.replace("Место ", "") : selectedSlotIndex + 1} · ${shiftIndex + 1}-я смена (${SHIFT_TIMES[shiftIndex]})`;
   bookingSlots.innerHTML = "";
   releaseButton.classList.toggle("is-hidden", !canRelease);
   releaseButton.textContent = "Освободить эту смену";
