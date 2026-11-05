@@ -37,6 +37,7 @@ const places = [
 ];
 
 const totalCapacity = places.reduce((sum, place) => sum + place.capacity, 0);
+let selectedWorkspacePanel = "tables";
 let pendingBooking = null;
 let selectedBooking = null;
 let seatDrag = null;
@@ -1600,6 +1601,30 @@ window.addEventListener("popstate", () => {
     ? route.dayId
     : route.viewMode === "archive" ? null : getVisibleDays()[0]?.id || null;
   render();
+});
+
+function selectWorkspacePanel(panel) {
+  cancelSeatDrag();
+  selectedWorkspacePanel = panel;
+  for (const name of ["tables", "participants"]) {
+    const selected = name === selectedWorkspacePanel;
+    const tab = document.querySelector(`#${name}Tab`);
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    document.querySelector(`#${name}Panel`).hidden = !selected;
+  }
+}
+
+const workspaceTabs = [...document.querySelectorAll(".workspace-tab")];
+workspaceTabs.forEach((tab, index) => {
+  tab.addEventListener("click", () => selectWorkspacePanel(index === 0 ? "tables" : "participants"));
+  tab.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
+    workspaceTabs[nextIndex].click();
+    workspaceTabs[nextIndex].focus();
+  });
 });
 
 function render() {

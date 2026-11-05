@@ -45,7 +45,7 @@
       <a id="archiveBack" class="archive-back" href="/archive" hidden>← Все прошедшие вечера</a>
 
       <section class="workspace" id="dayWorkspace" aria-label="Бронирование мест">
-        <div class="places">
+        <div class="day-details">
           <div class="section-title">
             <div>
               <form class="day-theme-form" id="dayThemeForm">
@@ -62,6 +62,12 @@
               <button class="ghost-button" id="clearAllButton" type="button">Очистить</button>
             </div>
           </div>
+        </div>
+        <div class="workspace-tabs" role="tablist" aria-label="Вид вечера">
+          <button class="workspace-tab" id="tablesTab" type="button" role="tab" aria-selected="true" aria-controls="tablesPanel">Столы</button>
+          <button class="workspace-tab" id="participantsTab" type="button" role="tab" aria-selected="false" aria-controls="participantsPanel" tabindex="-1">Участники</button>
+        </div>
+        <div class="places" id="tablesPanel" role="tabpanel" aria-labelledby="tablesTab" tabindex="0">
           <section id="seatingPlan" class="seating-plan" aria-label="Схема столов">
             <header class="plan-heading">
               <div><p class="eyebrow">Выберите своё место</p><h2 id="planTitle">План зала</h2></div>
@@ -75,7 +81,7 @@
           </section>
         </div>
 
-        <aside class="participants" aria-label="Участники">
+        <section class="participants" id="participantsPanel" role="tabpanel" aria-labelledby="participantsTab" tabindex="0" hidden>
           <div class="section-title">
             <h2>Участники</h2>
           </div>
@@ -94,7 +100,7 @@
             </table>
             <p class="empty-state" id="emptyState">Пока никто не записан</p>
           </div>
-        </aside>
+        </section>
       </section>
     </main>
 

@@ -81,6 +81,14 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     assert.equal(await page.locator(".big-zone .seat").count(), 8);
     assert.equal(await page.locator("#layoutPicker").count(), 0);
     assert.equal(await page.locator(".is-movable").count(), 0, "Guests cannot move bookings");
+    assert.equal(await page.locator("#tablesPanel").isVisible(), true);
+    assert.equal(await page.locator("#participantsPanel").isVisible(), false);
+    await page.locator("#participantsTab").click();
+    assert.equal(await page.locator("#participantsPanel").isVisible(), true);
+    assert.equal(await page.locator("#tablesPanel").isVisible(), false);
+    assert.equal(await page.locator("#currentDayDate").isVisible(), true);
+    await page.locator("#participantsTab").press("ArrowLeft");
+    assert.equal(await page.locator("#tablesTab").getAttribute("aria-selected"), "true");
     const kitchenRatio = await page.locator(".kitchen-surface").evaluate(el => el.getBoundingClientRect().width / el.parentElement.getBoundingClientRect().width);
     assert.ok(Math.abs(kitchenRatio - 0.35) < 0.001, "Kitchen table must be half the former 70% width");
     await page.locator("#seatingPlan").screenshot({ path: path.join(output, "floor-plan.png") });
@@ -167,10 +175,13 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
     await page.waitForFunction(() => document.querySelector("#seatMoveStatus").textContent === "Участник перемещён.");
     assert.equal(active.shiftBookings[1]["paint-6"][0].bookingId, "second-shift");
     assert.equal(active.bookings["paint-3"][0].name, "Давид");
+    await page.locator("#participantsTab").click();
     await page.locator('.paid-checkbox[data-place-id="kitchen-table"][data-slot-index="1"][data-shift-index="1"]').check();
     await page.waitForFunction(() => document.querySelector('.paid-checkbox[data-place-id="kitchen-table"][data-slot-index="1"][data-shift-index="1"]').checked);
     assert.equal(active.shiftBookings[1]["kitchen-table"][1].paid, true);
     assert.equal(active.bookings["kitchen-table"][1].paid, false);
+    assert.equal(await page.locator("#participantsPanel").isVisible(), true, "Payment refresh retains selected tab");
+    await page.locator("#tablesTab").click();
     await page.waitForTimeout(450); // Allow the intentional post-drag click guard to expire.
     await page.locator('.seat[data-place-id="kitchen-table"][data-slot-index="1"][data-shift-index="1"]').click();
     assert.ok((await page.locator("#dialogTitle").textContent()).includes("2-я смена"));
@@ -209,6 +220,12 @@ const output = path.resolve(process.env.PREVIEW_OUTPUT || path.join(root, ".supe
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${width}: horizontal overflow`);
       assert.equal(await page.locator(".seat").evaluateAll(els => els.every(el => el.getBoundingClientRect().height >= 44)), true);
       assert.equal(await page.locator(".kitchen-surface").evaluate(el => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth), true, `${width}: kitchen label overflow`);
+      await page.locator("#participantsTab").click();
+      assert.equal(await page.locator("#participantsPanel").isVisible(), true);
+      assert.equal(await page.locator("#seatingPlan").isVisible(), false);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${width}: participant overflow`);
+      if (width === 390) await page.locator("#dayWorkspace").screenshot({ path: path.join(output, "participants-mobile.png") });
+      await page.locator("#tablesTab").click();
       if (width === 390) await page.locator("#seatingPlan").screenshot({ path: path.join(output, "mobile.png") });
     }
     // Real touch events, as on a phone, use the same drag/drop operation.
